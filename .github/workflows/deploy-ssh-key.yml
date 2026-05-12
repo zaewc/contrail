@@ -1,0 +1,33 @@
+name: Deploy contrail (SSH Key method)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Deploy via SSH Key
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_KEY }}
+
+      - name: Run deployment
+        run: |
+          ssh -o StrictHostKeyChecking=no -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+          cd /home/ubuntu/contrail
+          git fetch origin main
+          git reset --hard origin/main
+          pnpm install --frozen-lockfile
+          pnpm build
+          pm2 delete contrail-api contrail-web 2>/dev/null || true
+          cd /home/ubuntu/contrail/apps/api && pm2 start "pnpm run start" --name "contrail-api"
+          cd /home/ubuntu/contrail/apps/web && pm2 start "pnpm run preview" --name "contrail-web"
+          pm2 save
+          echo "✅ Deployment complete!"
+          EOF
