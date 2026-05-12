@@ -18,14 +18,14 @@ type CurvePoint = {
 
 const EMPTY_COLOR = '#0d1117';
 
-const CELL_SIZE = 12;
+const CELL_SIZE = 10;
 const CELL_GAP = 4;
-const STEP = CELL_SIZE + CELL_GAP;
 
-// 화면 안에 들어오게 조절하는 값
-const COLUMNS_PER_WAVE = 56;
-const WAVE_HEIGHT = 140;
-const ROW_GAP = 36;
+// 나선형 모양 조절값
+const SPIRAL_START_RADIUS = 16;
+const SPIRAL_TURN_GAP = 18;
+const SPIRAL_ANGLE_STEP = 0.28;
+const SPIRAL_PADDING = 32;
 
 function toDateKey(date: Date): string {
   const year = date.getFullYear();
@@ -88,30 +88,20 @@ function normalizeContinuousDays(days: ContributionDay[]): NormalizedContributio
   return result;
 }
 
-function getCurvePoint(index: number): CurvePoint {
-  const waveIndex = Math.floor(index / COLUMNS_PER_WAVE);
-  const indexInWave = index % COLUMNS_PER_WAVE;
+function getSpiralPoint(index: number, total: number): CurvePoint {
+  // 오래된 날짜가 바깥쪽, 최신 날짜가 안쪽으로 오게 뒤집음
+  const reversedIndex = total - 1 - index;
 
-  const progress = indexInWave / (COLUMNS_PER_WAVE - 1);
-
-  const isReverse = waveIndex % 2 === 1;
-
-  const x = isReverse
-    ? (COLUMNS_PER_WAVE - 1 - indexInWave) * STEP
-    : indexInWave * STEP;
-
-  const baseY = waveIndex * (WAVE_HEIGHT + ROW_GAP);
-
-  // 부드러운 물결. 0 → 1 → 0 흐름
-  const curveY = Math.sin(progress * Math.PI) * WAVE_HEIGHT;
+  const angle = reversedIndex * SPIRAL_ANGLE_STEP;
+  const radius = SPIRAL_START_RADIUS + SPIRAL_TURN_GAP * Math.sqrt(reversedIndex);
 
   return {
-    x,
-    y: baseY + curveY,
+    x: Math.cos(angle) * radius,
+    y: Math.sin(angle) * radius,
   };
 }
 
-function getCurveSize(total: number) {
+function getSpiralSize(total: number) {
   if (total === 0) {
     return {
       width: 0,
@@ -119,37 +109,41 @@ function getCurveSize(total: number) {
     };
   }
 
-  const waveCount = Math.ceil(total / COLUMNS_PER_WAVE);
+  const maxRadius = SPIRAL_START_RADIUS + SPIRAL_TURN_GAP * Math.sqrt(total);
+  const size = Math.ceil(maxRadius * 2 + SPIRAL_PADDING * 2 + CELL_SIZE);
 
   return {
-    width: COLUMNS_PER_WAVE * STEP,
-    height: waveCount * (WAVE_HEIGHT + ROW_GAP) + CELL_SIZE,
+    width: size,
+    height: size,
   };
 }
 
 export const ContributionGrid: React.FC<ContributionGridProps> = ({ days }) => {
   const continuousDays = normalizeContinuousDays(days);
-  const curveSize = getCurveSize(continuousDays.length);
+  const spiralSize = getSpiralSize(continuousDays.length);
+
+  const centerX = spiralSize.width / 2;
+  const centerY = spiralSize.height / 2;
 
   return (
     <div className="contribution-container contribution-curve-container">
       <div
         className="contribution-curve"
         style={{
-          width: curveSize.width,
-          height: curveSize.height,
+          width: spiralSize.width,
+          height: spiralSize.height,
         }}
       >
         {continuousDays.map((day, index) => {
-          const point = getCurvePoint(index);
+          const point = getSpiralPoint(index, continuousDays.length);
 
           return (
             <div
               key={day.date}
               className={`contribution-cell contribution-curve-cell contribution-cell-level-${getContributionLevel(day.count)}`}
               style={{
-                left: point.x,
-                top: point.y,
+                left: centerX + point.x,
+                top: centerY + point.y,
               }}
               title={`${day.date}: ${day.count} contributions`}
             />

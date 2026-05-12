@@ -580,3 +580,21 @@ body {
   width: 12px;
   height: 12px;
 }
+
+.contribution-curve-container {
+  overflow: hidden;
+  padding: 24px;
+}
+
+.contribution-curve {
+  position: relative;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.contribution-curve-cell {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
