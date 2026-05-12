@@ -4,8 +4,8 @@ set -e
 # Deploy script for contrail
 
 PROJECT_DIR="/home/ubuntu/contrail"
-PORT=4000
-WEB_PORT=5173
+API_PORT=4000
+WEB_PORT=5173  # Internal web port (proxied through Nginx)
 
 echo "🚀 Starting deployment..."
 
@@ -45,7 +45,7 @@ pm2 delete contrail-api contrail-web 2>/dev/null || true
 # Start API server
 echo "🚀 Starting API server..."
 cd "$PROJECT_DIR/apps/api"
-pm2 start "pnpm run start" --name "contrail-api" --env "PORT=$PORT"
+pm2 start "pnpm run start" --name "contrail-api" --env "PORT=$API_PORT"
 
 # Start Web server
 echo "🚀 Starting Web server..."
@@ -56,5 +56,11 @@ pm2 start "pnpm run preview" --name "contrail-web" --env "PORT=$WEB_PORT"
 pm2 save
 
 echo "✅ Deployment complete!"
-echo "API: http://localhost:$PORT"
+echo ""
+echo "🖥️  Internal ports:"
+echo "API: http://localhost:$API_PORT"
 echo "Web: http://localhost:$WEB_PORT"
+echo ""
+echo "🌐 External access (via Nginx on port 80, forwarded to 25140):"
+echo "Web UI: http://ssh.gsmsv.site:25140"
+echo "API: http://ssh.gsmsv.site:25140/api"

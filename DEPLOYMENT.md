@@ -108,14 +108,72 @@ pm2 logs contrail-web
 pm2 logs
 ```
 
-## 5️⃣ 서버 접속 및 포트
+## 5️⃣ Nginx 리버스 프록시 설정
+
+웹과 API를 한 포트(80)에서 제공하려면 Nginx를 설정해야 합니다.
+
+### 자동 설정
+```bash
+ssh -p 24140 ubuntu@ssh.gsmsv.site "bash /tmp/nginx-setup.sh"
+```
+
+또는 직접 실행:
+```bash
+scp -P 24140 nginx-setup.sh ubuntu@ssh.gsmsv.site:/tmp/
+ssh -p 24140 ubuntu@ssh.gsmsv.site "bash /tmp/nginx-setup.sh"
+```
+
+설정 후:
+- `/` → Web UI (포트 5173)
+- `/api/*` → API (포트 4000)
+
+모두 외부적으로는 포트 80 (외부 포트 25140)으로 접속
+
+---
+
+## 6️⃣ 배포 순서 요약
+
+### 첫 배포
+```bash
+# 1. 로컬에서 최신 코드 푸시
+git add .
+git commit -m "Initial setup"
+git push origin main
+
+# 2. 서버 초기 설정 (첫 1회만)
+ssh -p 24140 ubuntu@ssh.gsmsv.site
+bash /tmp/server-setup.sh
+
+# 3. Nginx 설정 (첫 1회만)
+bash /tmp/nginx-setup.sh
+
+# 4. .env 파일 생성
+cd /home/ubuntu/contrail
+nano apps/api/.env
+# GITHUB_TOKEN 입력
+
+# 5. 수동 배포 (테스트)
+bash deploy.sh
+
+# 6. PM2 저장
+pm2 save
+```
+
+### 이후 배포
+```bash
+# GitHub에 푸시하면 자동 배포
+git push origin main
+# GitHub Actions가 자동으로 배포함 ✅
+```
+
+---
+
+## 7️⃣ 서버 접속 및 포트
 
 배포 완료 후 접속:
 
-- **Web UI**: `http://ssh.gsmsv.site:5173`
-- **API**: `http://ssh.gsmsv.site:4000`
-
-방화벽이나 포트 포워딩이 필요할 수 있습니다.
+- **Web UI**: `http://ssh.gsmsv.site:25140`
+- **API**: `http://ssh.gsmsv.site:25140/api`
 
 ## 6️⃣ 문제 해결
 
