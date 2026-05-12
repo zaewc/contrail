@@ -19,12 +19,15 @@ type CurvePoint = {
 const EMPTY_COLOR = '#0d1117';
 
 const CELL_SIZE = 10;
-const SPIRAL_PADDING = 40;
+const CELL_GAP = 4;
+const WEEK_DAYS = 7;
+
+const SPIRAL_PADDING = 48;
 
 // 나선 모양 조절값
-const SPIRAL_START_RADIUS = 8;
-const SPIRAL_TURN_GAP = 18;
-const POINT_GAP = 13;
+const SPIRAL_START_RADIUS = 24;
+const SPIRAL_TURN_GAP = 110;
+const WEEK_GAP = 15;
 
 function toDateKey(date: Date): string {
   const year = date.getFullYear();
@@ -69,6 +72,10 @@ function normalizeContinuousDays(days: ContributionDay[]): NormalizedContributio
   const last = lastContributionDay ?? sortedDays[sortedDays.length - 1];
 
   const start = getLocalDate(first.date);
+
+  // GitHub 잔디처럼 주 단위로 맞추기 위해 시작일을 일요일로 당김
+  start.setDate(start.getDate() - start.getDay());
+
   const end = getLocalDate(last.date);
 
   const result: NormalizedContributionDay[] = [];
@@ -87,14 +94,14 @@ function normalizeContinuousDays(days: ContributionDay[]): NormalizedContributio
   return result;
 }
 
-function getSpiralPoint(index: number): CurvePoint {
+function getSpiralCenterPoint(weekIndex: number): CurvePoint {
   let theta = 0;
   let radius = SPIRAL_START_RADIUS;
 
-  for (let i = 0; i < index; i += 1) {
+  for (let i = 0; i < weekIndex; i += 1) {
     radius = SPIRAL_START_RADIUS + (SPIRAL_TURN_GAP * theta) / (Math.PI * 2);
 
-    const thetaStep = POINT_GAP / Math.max(radius, 1);
+    const thetaStep = WEEK_GAP / Math.max(radius, 1);
     theta += thetaStep;
   }
 
@@ -106,6 +113,33 @@ function getSpiralPoint(index: number): CurvePoint {
   };
 }
 
+function getWeekTangentAngle(weekIndex: number): number {
+  const current = getSpiralCenterPoint(weekIndex);
+  const next = getSpiralCenterPoint(weekIndex + 1);
+
+  return Math.atan2(next.y - current.y, next.x - current.x);
+}
+
+function getContributionPoint(index: number): CurvePoint {
+  const weekIndex = Math.floor(index / WEEK_DAYS);
+  const dayIndex = index % WEEK_DAYS;
+
+  const center = getSpiralCenterPoint(weekIndex);
+  const tangentAngle = getWeekTangentAngle(weekIndex);
+
+  // 나선 진행 방향에 수직으로 7칸 펼침
+  const normalAngle = tangentAngle + Math.PI / 2;
+
+  // 0~6을 -3~3으로 보정해서 주 중심 기준으로 배치
+  const dayOffset = dayIndex - Math.floor(WEEK_DAYS / 2);
+  const distance = dayOffset * (CELL_SIZE + CELL_GAP);
+
+  return {
+    x: center.x + Math.cos(normalAngle) * distance,
+    y: center.y + Math.sin(normalAngle) * distance,
+  };
+}
+
 function getSpiralSize(total: number) {
   if (total === 0) {
     return {
@@ -114,9 +148,13 @@ function getSpiralSize(total: number) {
     };
   }
 
-  const lastPoint = getSpiralPoint(total - 1);
+  const weekCount = Math.ceil(total / WEEK_DAYS);
+  const lastPoint = getSpiralCenterPoint(weekCount - 1);
+
   const maxRadius = Math.sqrt(lastPoint.x ** 2 + lastPoint.y ** 2);
-  const size = Math.ceil(maxRadius * 2 + SPIRAL_PADDING * 2 + CELL_SIZE);
+  const bandRadius = ((WEEK_DAYS - 1) * (CELL_SIZE + CELL_GAP)) / 2;
+
+  const size = Math.ceil((maxRadius + bandRadius) * 2 + SPIRAL_PADDING * 2 + CELL_SIZE);
 
   return {
     width: size,
@@ -141,7 +179,7 @@ export const ContributionGrid: React.FC<ContributionGridProps> = ({ days }) => {
         }}
       >
         {continuousDays.map((day, index) => {
-          const point = getSpiralPoint(index);
+          const point = getContributionPoint(index);
 
           return (
             <div
