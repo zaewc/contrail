@@ -12,6 +12,7 @@ type NormalizedContributionDay = ContributionDay & {
 };
 
 const EMPTY_COLOR = '#0d1117';
+const ROW_COUNT = 18;
 
 function toDateKey(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -72,53 +73,37 @@ function normalizeContinuousDays(days: ContributionDay[]): NormalizedContributio
   return result;
 }
 
-function getYearMarkers(days: NormalizedContributionDay[]) {
-  const markers: Array<{ year: number; column: number }> = [];
-  const seen = new Set<number>();
+function getSnakeGridPosition(index: number) {
+  const column = Math.floor(index / ROW_COUNT);
+  const rowInColumn = index % ROW_COUNT;
 
-  days.forEach((day, index) => {
-    const year = getLocalDate(day.date).getFullYear();
+  const row = column % 2 === 0 ? rowInColumn : ROW_COUNT - 1 - rowInColumn;
 
-    if (!seen.has(year)) {
-      seen.add(year);
-      markers.push({
-        year,
-        column: Math.floor(index / 7),
-      });
-    }
-  });
-
-  return markers;
+  return {
+    gridColumnStart: column + 1,
+    gridRowStart: row + 1,
+  };
 }
 
 export const ContributionGrid: React.FC<ContributionGridProps> = ({ days }) => {
   const continuousDays = normalizeContinuousDays(days);
-  const yearMarkers = getYearMarkers(continuousDays);
 
   return (
     <div className="contribution-container">
-      <div className="contribution-scroll">
-        <div className="contribution-year-markers">
-          {yearMarkers.map(({ year, column }) => (
-            <div
-              key={year}
-              className="contribution-year-marker"
-              style={{ gridColumnStart: column + 1 }}
-            >
-              {year}
-            </div>
-          ))}
-        </div>
-
-        <div className="contribution-continuous-grid">
-          {continuousDays.map((day) => (
-            <div
-              key={day.date}
-              className={`contribution-cell contribution-cell-level-${getContributionLevel(day.count)}`}
-              title={`${day.date}: ${day.count} contributions`}
-            />
-          ))}
-        </div>
+      <div
+        className="contribution-snake-grid"
+        style={{
+          gridTemplateRows: `repeat(${ROW_COUNT}, 12px)`,
+        }}
+      >
+        {continuousDays.map((day, index) => (
+          <div
+            key={day.date}
+            className={`contribution-cell contribution-cell-level-${getContributionLevel(day.count)}`}
+            style={getSnakeGridPosition(index)}
+            title={`${day.date}: ${day.count} contributions`}
+          />
+        ))}
       </div>
     </div>
   );
