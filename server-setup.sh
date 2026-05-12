@@ -24,9 +24,23 @@ fi
 echo "📥 Installing PM2..."
 sudo npm install -g pm2
 
+# Install Nginx (if not already installed)
+if ! command -v nginx &> /dev/null; then
+  echo "📥 Installing Nginx..."
+  sudo apt-get install -y nginx
+  sudo systemctl enable nginx
+  sudo systemctl start nginx
+fi
+
 # Create project directory
 mkdir -p /home/ubuntu/contrail
 cd /home/ubuntu/contrail
+
+# Create web root directory
+echo "📁 Creating web root directory..."
+sudo mkdir -p /var/www/contrail
+sudo chown -R www-data:www-data /var/www/contrail
+sudo chmod -R 755 /var/www/contrail
 
 # Clone repository (first time only)
 if [ ! -d ".git" ]; then
@@ -37,10 +51,22 @@ if [ ! -d ".git" ]; then
 fi
 
 # Setup PM2 auto-restart on server reboot
+echo "🔄 Setting up PM2 auto-startup..."
 sudo pm2 startup -u ubuntu --hp /home/ubuntu
+sudo pm2 save
+
+# Configure sudoers for automated deployment (no password prompt)
+echo "🔐 Configuring sudo access for deployment..."
+echo "ubuntu ALL=(ALL) NOPASSWD: /bin/rm, /bin/cp, /usr/sbin/nginx, /bin/chown, /usr/bin/systemctl" | sudo tee /etc/sudoers.d/contrail-deploy > /dev/null
 
 echo "✅ Server setup complete!"
+echo ""
 echo "📝 Next steps:"
-echo "1. Copy deploy.sh to server: scp -P 24140 deploy.sh ubuntu@ssh.gsmsv.site:/home/ubuntu/contrail/"
-echo "2. Create .env file on server with GITHUB_TOKEN"
-echo "3. Run: bash /home/ubuntu/contrail/deploy.sh"
+echo "1. Create .env file on server:"
+echo "   ssh -p 24140 ubuntu@ssh.gsmsv.site"
+echo "   nano /home/ubuntu/contrail/apps/api/.env"
+echo ""
+echo "2. Initial deployment:"
+echo "   ssh -p 24140 ubuntu@ssh.gsmsv.site 'cd /home/ubuntu/contrail && bash deploy.sh'"
+echo ""
+echo "3. Configure GitHub Secrets for auto-deployment (see DEPLOYMENT.md)"

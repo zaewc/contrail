@@ -1,15 +1,13 @@
 #!/bin/bash
 set -e
 
-# Deploy script for contrail
 
 PROJECT_DIR="/home/ubuntu/contrail"
 API_PORT=4000
-WEB_PORT=5173  # Internal web port (proxied through Nginx)
+WEB_ROOT="/var/www/contrail"
 
-echo "🚀 Starting deployment..."
+echo "[0/8] Starting deployment..."
 
-# Create project directory if it doesn't exist
 if [ ! -d "$PROJECT_DIR" ]; then
   mkdir -p "$PROJECT_DIR"
   cd "$PROJECT_DIR"
@@ -18,49 +16,35 @@ fi
 
 cd "$PROJECT_DIR"
 
-# Fetch latest from remote
-echo "📥 Pulling latest code..."
+echo "[1/8] Pulling latest code..."
 git remote add origin https://github.com/yourusername/contrail.git 2>/dev/null || git remote set-url origin https://github.com/yourusername/contrail.git
 git fetch origin main
-git reset --hard origin/main
+git pull origin main
 
-# Install dependencies
-echo "📦 Installing dependencies..."
-pnpm install --frozen-lockfile
+echo "[2/8] Installing dependencies..."
+pnpm install
 
-# Build
-echo "🔨 Building project..."
+echo "[3/8] Building..."
 pnpm build
 
-# Create .env if not exists
-if [ ! -f "apps/api/.env" ]; then
-  echo "⚠️  Creating .env file - please add GITHUB_TOKEN manually"
-  cp apps/api/.env.example apps/api/.env
-fi
+echo "[4/8] Deploying web files to Nginx..."
+sudo rm -rf "$WEB_ROOT"/*
+sudo cp -r "$PROJECT_DIR/apps/web/dist"/* "$WEB_ROOT/"
+sudo chown -R www-data:www-data "$WEB_ROOT"
 
-# Stop existing services
-echo "🛑 Stopping existing services..."
-pm2 delete contrail-api contrail-web 2>/dev/null || true
+echo "[5/8] Restarting API server..."
+pm2 restart contrail-api || (cd "$PROJECT_DIR/apps/api" && pm2 start "pnpm run start" --name "contrail-api")
 
-# Start API server
-echo "🚀 Starting API server..."
-cd "$PROJECT_DIR/apps/api"
-pm2 start "pnpm run start" --name "contrail-api" --env "PORT=$API_PORT"
-
-# Start Web server
-echo "🚀 Starting Web server..."
-cd "$PROJECT_DIR/apps/web"
-pm2 start "pnpm run preview" --name "contrail-web" --env "PORT=$WEB_PORT"
-
-# Save PM2 config
 pm2 save
 
-echo "✅ Deployment complete!"
+echo "[6/8] Testing Nginx configuration..."
+sudo nginx -t
+
+echo "[7/8] Reloading Nginx..."
+sudo systemctl reload nginx
+
+echo "[8/8] Deployment complete!"
 echo ""
-echo "🖥️  Internal ports:"
-echo "API: http://localhost:$API_PORT"
-echo "Web: http://localhost:$WEB_PORT"
-echo ""
-echo "🌐 External access (via Nginx on port 80, forwarded to 25140):"
+echo "🌐 Access your app:"
 echo "Web UI: http://ssh.gsmsv.site:25140"
 echo "API: http://ssh.gsmsv.site:25140/api"

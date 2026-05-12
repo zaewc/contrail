@@ -1,5 +1,11 @@
 # CD/배포 가이드
 
+## 🎯 배포 아키텍처
+
+- **Web**: Nginx가 `/var/www/contrail`의 정적 파일을 서빙
+- **API**: PM2가 Node.js 서버 관리
+- **Port 25140**: Nginx를 통해 외부 접근
+
 ## 1️⃣ GitHub 저장소 준비
 
 ### 저장소 생성 및 Push
@@ -25,21 +31,35 @@ ssh -p 24140 ubuntu@ssh.gsmsv.site
 bash <(curl -s https://raw.githubusercontent.com/yourusername/contrail/main/server-setup.sh)
 ```
 
-또는 로컬에서 직접 실행:
+### Step 2: Sudo 권한 설정 (자동 배포용)
+
+GitHub Actions에서 sudo 명령어를 암호 없이 실행하려면, 서버에서 다음을 설정하세요:
+
 ```bash
-scp -P 24140 server-setup.sh ubuntu@ssh.gsmsv.site:/tmp/
-ssh -p 24140 ubuntu@ssh.gsmsv.site "bash /tmp/server-setup.sh"
+# 서버에 SSH 접속
+ssh -p 24140 ubuntu@ssh.gsmsv.site
+
+# sudoers 편집 (안전한 방식)
+sudo visudo
+
+# 다음 라인을 파일 끝에 추가:
+ubuntu ALL=(ALL) NOPASSWD: /bin/rm, /bin/cp, /usr/sbin/nginx, /bin/chown, /usr/bin/systemctl
 ```
 
-### Step 2: 서버에서 .env 파일 생성
+또는 한 줄로:
+```bash
+ssh -p 24140 ubuntu@ssh.gsmsv.site "echo 'ubuntu ALL=(ALL) NOPASSWD: /bin/rm, /bin/cp, /usr/sbin/nginx, /bin/chown, /usr/bin/systemctl' | sudo tee /etc/sudoers.d/contrail-deploy"
+```
+
+### Step 3: 서버에서 .env 파일 생성
 ```bash
 ssh -p 24140 ubuntu@ssh.gsmsv.site
 
 # 디렉토리 이동
-cd /home/ubuntu/contrail
+cd /home/ubuntu/contrail/apps/api
 
 # .env 파일 생성
-nano apps/api/.env
+nano .env
 ```
 
 다음 내용 입력:
@@ -49,34 +69,28 @@ PORT=4000
 CACHE_TTL_SECONDS=21600
 ```
 
-### Step 3: 배포 스크립트 실행
+### Step 4: 초기 배포
 ```bash
 ssh -p 24140 ubuntu@ssh.gsmsv.site "cd /home/ubuntu/contrail && bash deploy.sh"
 ```
 
-## 3️⃣ GitHub Actions 설정
+## 3️⃣ GitHub Actions 자동 배포 설정
 
-### Step 1: GitHub Secrets 등록
+### 방법 1️⃣: 비밀번호 방식 (간단)
+
+#### Step 1: GitHub Secrets 등록
 
 1. GitHub 저장소로 이동: `https://github.com/yourusername/contrail`
-2. Settings → Secrets and variables → Actions → New repository secret
-3. 다음 secrets 추가:
+2. **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
+3. 다음 secret 추가:
 
 | Name | Value |
 |------|-------|
 | `SSH_PASSWORD` | `@*6y$x&A` |
 
-또는 SSH 키 방식 (더 안전):
-| `SSH_KEY` | 서버의 SSH 개인키 |
-| `SSH_HOST` | `ssh.gsmsv.site` |
-| `SSH_PORT` | `24140` |
-| `SSH_USER` | `ubuntu` |
+#### Step 2: 자동 배포 시작
 
-### Step 2: GitHub Actions 워크플로우 자동 실행
-
-`.github/workflows/deploy.yml` 파일이 이미 준비되어 있습니다.
-
-이제 `main` 브랜치에 push하면 자동으로 배포됩니다!
+이제 `main` 브랜치에 push하면 자동으로 배포됩니다:
 
 ```bash
 # 로컬에서 수정 후 push
@@ -84,20 +98,115 @@ git add .
 git commit -m "Update feature"
 git push origin main
 
-# 자동으로 배포 시작됨 ✅
+# 자동으로 배포 시작 ✅
 ```
+
+---
+
+### 방법 2️⃣: SSH 키 방식 (더 안전) ⭐
+
+#### Step 1: 서버에서 SSH 키 생성
+
+```bash
+ssh -p 24140 ubuntu@ssh.gsmsv.site
+
+# SSH 키 생성 (파이프라인용, 기존 키 덮어쓰지 않음)
+ssh-keygen -t ed25519 -f ~/.ssh/github-actions -N ""
+
+# 공개키를 authorized_keys에 추가
+cat ~/.ssh/github-actions.pub >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+
+# 개인키 내용 복사 (GitHub에 등록할 것)
+cat ~/.ssh/github-actions
+```
+
+#### Step 2: GitHub Secrets 등록
+
+1. GitHub 저장소로 이동: `https://github.com/yourusername/contrail`
+2. **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
+3. 다음 secrets 추가:
+
+| Name | Value |
+|------|-------|
+| `SSH_KEY` | ⬆️ 서버에서 복사한 개인키 내용 |
+| `SSH_HOST` | `ssh.gsmsv.site` |
+| `SSH_PORT` | `24140` |
+| `SSH_USER` | `ubuntu` |
+
+#### Step 3: 자동 배포 시작
+
+```bash
+git add .
+git commit -m "Update feature"
+git push origin main
+
+# 자동으로 배포 시작 ✅
+```
+
+---
 
 ## 4️⃣ 배포 상태 확인
 
 ### GitHub Actions 로그 확인
-- GitHub 저장소 → Actions 탭
-- 최신 워크플로우 실행 상태 확인
+1. GitHub 저장소 → **Actions** 탭
+2. 최신 워크플로우 실행 상태 확인
+3. 실패하면 로그를 클릭해서 상세 오류 확인
 
-### 서버 로그 확인
+### 서버 상태 확인
 ```bash
 ssh -p 24140 ubuntu@ssh.gsmsv.site
 
-# PM2 상태 확인
+# PM2 API 서버 상태
+pm2 status
+
+# API 서버 로그
+pm2 logs contrail-api
+
+# Nginx 상태
+sudo systemctl status nginx
+
+# Nginx 에러 로그
+sudo tail -100 /var/log/nginx/error.log
+
+# 배포된 웹 파일 확인
+ls -la /var/www/contrail/
+```
+
+## ⚡ 수동 배포
+
+배포 스크립트를 수동으로 실행하려면:
+
+```bash
+ssh -p 24140 ubuntu@ssh.gsmsv.site "cd /home/ubuntu/contrail && bash deploy.sh"
+```
+
+또는 GitHub Actions 페이지에서 **Run workflow** 버튼을 클릭하세요.
+
+## 🆘 문제 해결
+
+### CD가 동작하지 않을 때
+
+1. **SSH 연결 실패**
+   - SSH 비밀번호/키가 올바른지 확인
+   - 서버의 포트 24140이 열려있는지 확인
+
+2. **Sudo 권한 오류**
+   - 서버에서 sudoers 설정 확인: `sudo visudo`
+   - NOPASSWD 권한이 추가되었는지 확인
+
+3. **배포 스크립트 실패**
+   - 서버 로그 확인: `ssh -p 24140 ubuntu@ssh.gsmsv.site "cd /home/ubuntu/contrail && bash deploy.sh"`
+   - PM2 로그: `pm2 logs contrail-api`
+
+4. **Nginx 오류**
+   - 설정 테스트: `sudo nginx -t`
+   - 에러 로그: `sudo tail -50 /var/log/nginx/error.log`
+   - 접근 로그: `sudo tail -50 /var/log/nginx/access.log`
+
+5. **포트 충돌**
+   - API가 포트 4000을 사용하는지 확인: `lsof -i :4000`
+   - 이미 실행 중이면: `pm2 restart contrail-api`
 pm2 status
 
 # 로그 확인
