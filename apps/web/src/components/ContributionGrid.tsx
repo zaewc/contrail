@@ -11,11 +11,28 @@ type NormalizedContributionDay = ContributionDay & {
   color: string;
 };
 
+type CurvePoint = {
+  x: number;
+  y: number;
+};
+
 const EMPTY_COLOR = '#0d1117';
-const ROW_COUNT = 18;
+
+const CELL_SIZE = 12;
+const CELL_GAP = 4;
+const STEP = CELL_SIZE + CELL_GAP;
+
+// 화면 안에 들어오게 조절하는 값
+const COLUMNS_PER_WAVE = 72;
+const WAVE_HEIGHT = 120;
+const ROW_GAP = 44;
 
 function toDateKey(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
 }
 
 function getLocalDate(dateKey: string): Date {
@@ -53,8 +70,6 @@ function normalizeContinuousDays(days: ContributionDay[]): NormalizedContributio
   const last = lastContributionDay ?? sortedDays[sortedDays.length - 1];
 
   const start = getLocalDate(first.date);
-  start.setDate(start.getDate() - start.getDay());
-
   const end = getLocalDate(last.date);
 
   const result: NormalizedContributionDay[] = [];
@@ -73,37 +88,73 @@ function normalizeContinuousDays(days: ContributionDay[]): NormalizedContributio
   return result;
 }
 
-function getSnakeGridPosition(index: number) {
-  const column = Math.floor(index / ROW_COUNT);
-  const rowInColumn = index % ROW_COUNT;
+function getCurvePoint(index: number): CurvePoint {
+  const waveIndex = Math.floor(index / COLUMNS_PER_WAVE);
+  const indexInWave = index % COLUMNS_PER_WAVE;
 
-  const row = column % 2 === 0 ? rowInColumn : ROW_COUNT - 1 - rowInColumn;
+  const progress = indexInWave / (COLUMNS_PER_WAVE - 1);
+
+  const isReverse = waveIndex % 2 === 1;
+
+  const x = isReverse
+    ? (COLUMNS_PER_WAVE - 1 - indexInWave) * STEP
+    : indexInWave * STEP;
+
+  const baseY = waveIndex * (WAVE_HEIGHT + ROW_GAP);
+
+  // 부드러운 물결. 0 → 1 → 0 흐름
+  const curveY = Math.sin(progress * Math.PI) * WAVE_HEIGHT;
 
   return {
-    gridColumnStart: column + 1,
-    gridRowStart: row + 1,
+    x,
+    y: baseY + curveY,
+  };
+}
+
+function getCurveSize(total: number) {
+  if (total === 0) {
+    return {
+      width: 0,
+      height: 0,
+    };
+  }
+
+  const waveCount = Math.ceil(total / COLUMNS_PER_WAVE);
+
+  return {
+    width: COLUMNS_PER_WAVE * STEP,
+    height: waveCount * (WAVE_HEIGHT + ROW_GAP) + CELL_SIZE,
   };
 }
 
 export const ContributionGrid: React.FC<ContributionGridProps> = ({ days }) => {
   const continuousDays = normalizeContinuousDays(days);
+  const curveSize = getCurveSize(continuousDays.length);
 
   return (
-    <div className="contribution-container">
+    <div className="contribution-container contribution-curve-container">
       <div
-        className="contribution-snake-grid"
+        className="contribution-curve"
         style={{
-          gridTemplateRows: `repeat(${ROW_COUNT}, 12px)`,
+          width: curveSize.width,
+          height: curveSize.height,
         }}
       >
-        {continuousDays.map((day, index) => (
-          <div
-            key={day.date}
-            className={`contribution-cell contribution-cell-level-${getContributionLevel(day.count)}`}
-            style={getSnakeGridPosition(index)}
-            title={`${day.date}: ${day.count} contributions`}
-          />
-        ))}
+        {continuousDays.map((day, index) => {
+          const point = getCurvePoint(index);
+
+          return (
+            <div
+              key={day.date}
+              className={`contribution-cell contribution-curve-cell contribution-cell-level-${getContributionLevel(day.count)}`}
+              style={{
+                left: point.x,
+                top: point.y,
+              }}
+              title={`${day.date}: ${day.count} contributions`}
+            />
+          );
+        })}
       </div>
     </div>
   );
