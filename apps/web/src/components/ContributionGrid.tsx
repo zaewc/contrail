@@ -19,13 +19,12 @@ type CurvePoint = {
 const EMPTY_COLOR = '#0d1117';
 
 const CELL_SIZE = 10;
-const CELL_GAP = 4;
+const SPIRAL_PADDING = 40;
 
-// 나선형 모양 조절값
-const SPIRAL_START_RADIUS = 16;
+// 나선 모양 조절값
+const SPIRAL_START_RADIUS = 8;
 const SPIRAL_TURN_GAP = 18;
-const SPIRAL_ANGLE_STEP = 0.28;
-const SPIRAL_PADDING = 32;
+const POINT_GAP = 13;
 
 function toDateKey(date: Date): string {
   const year = date.getFullYear();
@@ -88,16 +87,22 @@ function normalizeContinuousDays(days: ContributionDay[]): NormalizedContributio
   return result;
 }
 
-function getSpiralPoint(index: number, total: number): CurvePoint {
-  // 오래된 날짜가 바깥쪽, 최신 날짜가 안쪽으로 오게 뒤집음
-  const reversedIndex = total - 1 - index;
+function getSpiralPoint(index: number): CurvePoint {
+  let theta = 0;
+  let radius = SPIRAL_START_RADIUS;
 
-  const angle = reversedIndex * SPIRAL_ANGLE_STEP;
-  const radius = SPIRAL_START_RADIUS + SPIRAL_TURN_GAP * Math.sqrt(reversedIndex);
+  for (let i = 0; i < index; i += 1) {
+    radius = SPIRAL_START_RADIUS + (SPIRAL_TURN_GAP * theta) / (Math.PI * 2);
+
+    const thetaStep = POINT_GAP / Math.max(radius, 1);
+    theta += thetaStep;
+  }
+
+  radius = SPIRAL_START_RADIUS + (SPIRAL_TURN_GAP * theta) / (Math.PI * 2);
 
   return {
-    x: Math.cos(angle) * radius,
-    y: Math.sin(angle) * radius,
+    x: Math.cos(theta) * radius,
+    y: Math.sin(theta) * radius,
   };
 }
 
@@ -109,7 +114,8 @@ function getSpiralSize(total: number) {
     };
   }
 
-  const maxRadius = SPIRAL_START_RADIUS + SPIRAL_TURN_GAP * Math.sqrt(total);
+  const lastPoint = getSpiralPoint(total - 1);
+  const maxRadius = Math.sqrt(lastPoint.x ** 2 + lastPoint.y ** 2);
   const size = Math.ceil(maxRadius * 2 + SPIRAL_PADDING * 2 + CELL_SIZE);
 
   return {
@@ -135,15 +141,15 @@ export const ContributionGrid: React.FC<ContributionGridProps> = ({ days }) => {
         }}
       >
         {continuousDays.map((day, index) => {
-          const point = getSpiralPoint(index, continuousDays.length);
+          const point = getSpiralPoint(index);
 
           return (
             <div
               key={day.date}
               className={`contribution-cell contribution-curve-cell contribution-cell-level-${getContributionLevel(day.count)}`}
               style={{
-                left: centerX + point.x,
-                top: centerY + point.y,
+                left: centerX + point.x - CELL_SIZE / 2,
+                top: centerY + point.y - CELL_SIZE / 2,
               }}
               title={`${day.date}: ${day.count} contributions`}
             />
