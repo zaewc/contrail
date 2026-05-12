@@ -23,9 +23,9 @@ const CELL_GAP = 4;
 const STEP = CELL_SIZE + CELL_GAP;
 
 // 화면 안에 들어오게 조절하는 값
-const COLUMNS_PER_WAVE = 72;
-const WAVE_HEIGHT = 120;
-const ROW_GAP = 44;
+const COLUMNS_PER_WAVE = 56;
+const WAVE_HEIGHT = 140;
+const ROW_GAP = 36;
 
 function toDateKey(date: Date): string {
   const year = date.getFullYear();
