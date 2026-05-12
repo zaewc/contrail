@@ -109,12 +109,12 @@ export const App: React.FC = () => {
           <StatsCard stats={stats} />
 
           <div className="contribution-section">
-            <h3>Contribution Grass (Last 5 Years)</h3>
+            <h3>잔디</h3>
             <ContributionGrid days={stats.calendar} />
           </div>
 
           <div className="embed-section">
-            <h3>README Embed</h3>
+            <h3>리드미에 넣기</h3>
             <div className="embed-code">
               <code>![contrail]({getCardUrl(stats.login)})</code>
               <button
