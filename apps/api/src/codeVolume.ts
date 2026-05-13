@@ -1,4 +1,8 @@
-import { classifyRestError, githubRest } from './githubClient.js';
+import {
+  classifyRestError,
+  githubRest,
+  queryGitHubGraphQL,
+} from './githubClient.js';
 import { languageForFilename } from './language.js';
 import {
   CodeVolumeOptions,
@@ -27,11 +31,31 @@ const COMMIT_LIST_CONCURRENCY = 8;
 
 type CommitListItem = {
   sha: string;
+  additions?: number;
+  deletions?: number;
+  changedFiles?: number;
 };
 
 type CommitCandidate = {
   repo: ContributedRepository;
   commit: CommitListItem;
+};
+
+type CommitHistoryResponse = {
+  repository: {
+    defaultBranchRef: {
+      target: {
+        history: {
+          nodes: Array<{
+            oid: string;
+            additions: number;
+            deletions: number;
+            changedFiles: number;
+          }>;
+        };
+      } | null;
+    } | null;
+  } | null;
 };
 
 type CommitDetail = {
@@ -83,6 +107,17 @@ function addCommitDetailToStats(
   }
 }
 
+function addCommitSummaryToStats(
+  commit: CommitListItem,
+  stats: CodeVolumeStats
+): void {
+  stats.summary.commitsAnalyzed += 1;
+  stats.summary.filesChanged += commit.changedFiles ?? 0;
+  stats.summary.additions += commit.additions ?? 0;
+  stats.summary.deletions += commit.deletions ?? 0;
+  stats.summary.changes += (commit.additions ?? 0) + (commit.deletions ?? 0);
+}
+
 function emptyStats(options: CodeVolumeOptions): CodeVolumeStats {
   return {
     scope: {
@@ -105,11 +140,53 @@ function emptyStats(options: CodeVolumeOptions): CodeVolumeStats {
   };
 }
 
+async function fetchCommitShasByUserId(
+  repo: ContributedRepository,
+  authorId: string,
+  since: string
+): Promise<CommitListItem[]> {
+  const query = `
+    query RepositoryCommitHistory($owner: String!, $name: String!, $authorId: ID!, $since: GitTimestamp!) {
+      repository(owner: $owner, name: $name) {
+        defaultBranchRef {
+          target {
+            ... on Commit {
+              history(first: 100, author: { id: $authorId }, since: $since) {
+                nodes {
+                  oid
+                  additions
+                  deletions
+                  changedFiles
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+  const data = (await queryGitHubGraphQL(query, {
+    owner: repo.owner,
+    name: repo.name,
+    authorId,
+    since,
+  })) as CommitHistoryResponse;
+
+  return (
+    data.repository?.defaultBranchRef?.target?.history.nodes.map((node) => ({
+      sha: node.oid,
+      additions: node.additions,
+      deletions: node.deletions,
+      changedFiles: node.changedFiles,
+    })) ?? []
+  );
+}
+
 export async function analyzeCodeVolume(
   login: string,
   repositories: ContributedRepository[],
   options: CodeVolumeOptions,
-  commitShasByRepository?: Map<string, Set<string>>
+  authorId?: string
 ): Promise<CodeVolumeStats> {
   const safeOptions = {
     years: Math.max(1, options.years),
@@ -131,36 +208,26 @@ export async function analyzeCodeVolume(
 
   const candidates: CommitCandidate[] = [];
 
-  if (commitShasByRepository) {
-    for (const repo of targetRepositories) {
-      const shas = commitShasByRepository.get(repo.nameWithOwner);
-      if (!shas) {
-        continue;
-      }
-      for (const sha of shas) {
-        candidates.push({ repo, commit: { sha } });
-      }
-    }
-  }
-
   for (
     let i = 0;
-    !commitShasByRepository && i < targetRepositories.length;
+    i < targetRepositories.length;
     i += COMMIT_LIST_CONCURRENCY
   ) {
     const batch = targetRepositories.slice(i, i + COMMIT_LIST_CONCURRENCY);
     const results = await Promise.allSettled(
       batch.map(async (repo) => ({
         repo,
-        commits: await githubRest<CommitListItem[]>(
-          `/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}/commits`,
-          {
-            author: login,
-            since: since.toISOString(),
-            per_page: 100,
-            page: 1,
-          }
-        ),
+        commits: authorId
+          ? await fetchCommitShasByUserId(repo, authorId, since.toISOString())
+          : await githubRest<CommitListItem[]>(
+              `/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}/commits`,
+              {
+                author: login,
+                since: since.toISOString(),
+                per_page: 100,
+                page: 1,
+              }
+            ),
       }))
     );
 
@@ -197,7 +264,21 @@ export async function analyzeCodeVolume(
   const commitCountsByRepository = new Map<string, number>();
   const detailFailureByRepository = new Map<string, string>();
 
-  for (let i = 0; i < commitsToAnalyze.length; i += COMMIT_DETAIL_CONCURRENCY) {
+  if (authorId) {
+    for (const { repo, commit } of commitsToAnalyze) {
+      addCommitSummaryToStats(commit, stats);
+      commitCountsByRepository.set(
+        repo.nameWithOwner,
+        (commitCountsByRepository.get(repo.nameWithOwner) ?? 0) + 1
+      );
+    }
+  }
+
+  for (
+    let i = 0;
+    !authorId && i < commitsToAnalyze.length;
+    i += COMMIT_DETAIL_CONCURRENCY
+  ) {
     const batch = commitsToAnalyze.slice(i, i + COMMIT_DETAIL_CONCURRENCY);
     const results = await Promise.allSettled(
       batch.map(({ repo, commit }) =>

@@ -11,7 +11,7 @@ const CACHE_TTL = parseInt(process.env.CACHE_TTL_SECONDS || '21600', 10);
 const DEFAULT_INCREMENTAL_COMMIT_LIMIT = 100;
 const MAX_INCREMENTAL_COMMIT_LIMIT = 1000;
 const statsCacheKey = (login: string, commitLimit: number | null = DEFAULT_INCREMENTAL_COMMIT_LIMIT) =>
-  `github:stats:${login.toLowerCase()}:v5:commitLimit:${commitLimit ?? 'all'}`;
+  `github:stats:${login.toLowerCase()}:v6:commitLimit:${commitLimit ?? 'all'}`;
 const svgCacheKey = (login: string) => `svg:${login.toLowerCase()}:v2`;
 const pendingStatsRequests = new Map<string, Promise<GitHubStats>>();
 

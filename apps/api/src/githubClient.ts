@@ -1,7 +1,9 @@
 const GITHUB_GRAPHQL_URL = 'https://api.github.com/graphql';
 const GITHUB_REST_URL = 'https://api.github.com';
 
-export const MIN_RATE_LIMIT_REMAINING = 100;
+export const MIN_RATE_LIMIT_REMAINING = Number(
+  process.env.GITHUB_REST_MIN_RATE_LIMIT_REMAINING ?? 5
+);
 
 export type GitHubRestErrorReason =
   | 'not_found'
@@ -88,7 +90,9 @@ export async function githubRest<T>(
     },
   });
 
-  const remaining = Number(response.headers.get('x-ratelimit-remaining'));
+  const remainingHeader = response.headers.get('x-ratelimit-remaining');
+  const remaining =
+    remainingHeader === null ? Number.NaN : Number(remainingHeader);
   if (!Number.isNaN(remaining) && remaining < MIN_RATE_LIMIT_REMAINING) {
     throw new GitHubRestError('rate_limited', 'GitHub REST rate limit is low');
   }
