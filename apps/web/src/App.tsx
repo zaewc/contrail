@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { fetchStats, getCardUrl, GitHubStats } from './api.js';
 import { StatsCard } from './components/StatsCard.js';
 import { ContributionGrid } from './components/ContributionGrid.js';
+import { TechTreemap } from './components/TechTreemap.js';
 import './styles.css';
 
 type AppState = 'empty' | 'loading' | 'success' | 'error';
@@ -58,12 +59,6 @@ export const App: React.FC = () => {
     });
   };
   const formatNumber = (n: number): string => n.toLocaleString('en-US');
-  const formatBytes = (bytes: number): string =>
-    Intl.NumberFormat('en-US', {
-      notation: 'compact',
-      maximumFractionDigits: 1,
-    }).format(bytes);
-  const formatPercent = (n: number): string => `${n.toFixed(1)}%`;
 
   return (
     <div className="container">
@@ -174,28 +169,7 @@ export const App: React.FC = () => {
 
           <section className="analysis-card full-width">
             <h3>기술스택</h3>
-            <div className="bar-list">
-              {stats.techStack.slice(0, 8).map((item) => (
-                <div className="bar-row" key={item.name}>
-                  <div className="bar-label">
-                    <strong>{item.name}</strong>
-                    <span>
-                      {formatPercent(item.percentage)} · {formatBytes(item.bytes)} ·{' '}
-                      {formatNumber(item.repositories)} repos
-                    </span>
-                  </div>
-                  <div className="bar-track">
-                    <div
-                      className="bar-fill tech"
-                      style={{ width: `${Math.max(item.percentage, 2)}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-              {stats.techStack.length === 0 && (
-                <div className="metric-note">No language data available.</div>
-              )}
-            </div>
+            <TechTreemap items={stats.techStack} />
           </section>
 
           <div className="contribution-section">

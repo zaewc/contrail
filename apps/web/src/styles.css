@@ -202,24 +202,39 @@ body {
   margin-top: 4px;
 }
 
-/* Stats Grid */
-.stats-grid {
+/* Stats */
+.stats-card {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: minmax(180px, 0.45fr) minmax(320px, 1fr);
   gap: 12px;
   margin-bottom: 30px;
 }
 
-.stat-card {
+.stats-summary {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.stats-summary > div,
+.radial-panel {
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background-color: var(--bg-secondary);
+}
+
+.stats-summary > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 112px;
   text-align: center;
   transition: all 0.2s;
 }
 
-.stat-card:hover {
+.stats-summary > div:hover,
+.radial-panel:hover {
   border-color: var(--accent);
   background-color: var(--bg-tertiary);
 }
@@ -236,6 +251,44 @@ body {
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.radial-panel {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(140px, 0.45fr);
+  gap: 16px;
+  align-items: center;
+  min-height: 260px;
+}
+
+.radial-chart {
+  width: 100%;
+  height: 240px;
+  min-width: 0;
+}
+
+.radial-legend {
+  display: grid;
+  gap: 8px;
+}
+
+.radial-legend-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.radial-legend-item span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.radial-legend-item strong {
+  color: var(--text-primary);
+  font-size: 14px;
 }
 
 /* Analysis Sections */
@@ -373,6 +426,28 @@ body {
 
 .bar-fill.tech {
   background: linear-gradient(90deg, var(--accent-dark), #79c0ff);
+}
+
+.tech-treemap {
+  width: 100%;
+  height: 320px;
+  overflow: hidden;
+}
+
+.tech-treemap-name,
+.tech-treemap-percent {
+  fill: #0d1117;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.tech-treemap-name {
+  font-size: 14px;
+}
+
+.tech-treemap-percent {
+  font-size: 12px;
+  opacity: 0.75;
 }
 
 .ratio-row {
@@ -596,13 +671,22 @@ body {
     text-align: center;
   }
 
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .stats-card,
+  .radial-panel {
+    grid-template-columns: 1fr;
   }
 
   .analysis-grid,
   .metric-grid {
     grid-template-columns: 1fr;
+  }
+
+  .radial-chart {
+    height: 220px;
+  }
+
+  .tech-treemap {
+    height: 280px;
   }
 
   .bar-label,
