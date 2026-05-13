@@ -67,7 +67,11 @@ fastify.get('/api/users/:login/card.svg', async (request, reply) => {
         return cached;
     }
     try {
-        const stats = await getGitHubStats(login);
+        const cachedStats = getCached(statsCacheKey(login));
+        const stats = cachedStats ?? (await getGitHubStats(login));
+        if (!cachedStats) {
+            setCached(statsCacheKey(login), stats, CACHE_TTL);
+        }
         const svg = renderStatsSvg(stats);
         // Cache the result
         setCached(svgCacheKey(login), svg, CACHE_TTL);

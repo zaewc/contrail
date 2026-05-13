@@ -4,6 +4,7 @@ import cors from '@fastify/cors';
 import { getGitHubStats } from './github.js';
 import { getCached, setCached } from './cache.js';
 import { renderStatsSvg } from './svg.js';
+import type { GitHubStats } from './types.js';
 
 const PORT = parseInt(process.env.PORT || '4000', 10);
 const CACHE_TTL = parseInt(process.env.CACHE_TTL_SECONDS || '21600', 10);
@@ -86,7 +87,11 @@ fastify.get<{ Params: { login: string } }>(
     }
 
     try {
-      const stats = await getGitHubStats(login);
+      const cachedStats = getCached<GitHubStats>(statsCacheKey(login));
+      const stats = cachedStats ?? (await getGitHubStats(login));
+      if (!cachedStats) {
+        setCached(statsCacheKey(login), stats, CACHE_TTL);
+      }
       const svg = renderStatsSvg(stats);
 
       // Cache the result
