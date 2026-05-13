@@ -7,6 +7,9 @@ import { renderStatsSvg } from './svg.js';
 
 const PORT = parseInt(process.env.PORT || '4000', 10);
 const CACHE_TTL = parseInt(process.env.CACHE_TTL_SECONDS || '21600', 10);
+const statsCacheKey = (login: string) =>
+  `github:stats:${login.toLowerCase()}:v2`;
+const svgCacheKey = (login: string) => `svg:${login.toLowerCase()}:v2`;
 
 const fastify = Fastify({
   logger: true,
@@ -29,7 +32,7 @@ fastify.get<{ Params: { login: string } }>(
     const { login } = request.params;
 
     // Check cache
-    const cached = getCached(`stats:${login}`);
+    const cached = getCached(statsCacheKey(login));
     if (cached) {
       return cached;
     }
@@ -38,7 +41,7 @@ fastify.get<{ Params: { login: string } }>(
       const stats = await getGitHubStats(login);
 
       // Cache the result
-      setCached(`stats:${login}`, stats, CACHE_TTL);
+      setCached(statsCacheKey(login), stats, CACHE_TTL);
 
       return stats;
     } catch (error: any) {
@@ -74,7 +77,7 @@ fastify.get<{ Params: { login: string } }>(
     const { login } = request.params;
 
     // Check cache
-    const cached = getCached(`svg:${login}`);
+    const cached = getCached(svgCacheKey(login));
     if (cached) {
       reply
         .type('image/svg+xml')
@@ -87,7 +90,7 @@ fastify.get<{ Params: { login: string } }>(
       const svg = renderStatsSvg(stats);
 
       // Cache the result
-      setCached(`svg:${login}`, svg, CACHE_TTL);
+      setCached(svgCacheKey(login), svg, CACHE_TTL);
 
       reply
         .type('image/svg+xml')
