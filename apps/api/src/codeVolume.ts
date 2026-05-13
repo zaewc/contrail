@@ -20,7 +20,7 @@ export const DEFAULT_COMMIT_LIMIT = readPositiveIntegerEnv(
   'CODE_VOLUME_COMMIT_LIMIT',
   100
 );
-export const MAX_COMMIT_LIMIT = 1000;
+export const MAX_COMMIT_LIMIT = 10000;
 export const DEFAULT_REPOSITORY_LIMIT = readPositiveIntegerEnv(
   'CODE_VOLUME_REPOSITORY_LIMIT',
   20
@@ -41,11 +41,20 @@ type CommitCandidate = {
   commit: CommitListItem;
 };
 
+type CommitHistoryState = {
+  repo: ContributedRepository;
+  cursor: string | null;
+};
+
 type CommitHistoryResponse = {
   repository: {
     defaultBranchRef: {
       target: {
         history: {
+          pageInfo: {
+            hasNextPage: boolean;
+            endCursor: string | null;
+          };
           nodes: Array<{
             oid: string;
             additions: number;
@@ -143,15 +152,24 @@ function emptyStats(options: CodeVolumeOptions): CodeVolumeStats {
 async function fetchCommitShasByUserId(
   repo: ContributedRepository,
   authorId: string,
-  since: string
-): Promise<CommitListItem[]> {
+  since: string,
+  after?: string | null
+): Promise<{
+  commits: CommitListItem[];
+  hasNextPage: boolean;
+  endCursor: string | null;
+}> {
   const query = `
-    query RepositoryCommitHistory($owner: String!, $name: String!, $authorId: ID!, $since: GitTimestamp!) {
+    query RepositoryCommitHistory($owner: String!, $name: String!, $authorId: ID!, $since: GitTimestamp!, $after: String) {
       repository(owner: $owner, name: $name) {
         defaultBranchRef {
           target {
             ... on Commit {
-              history(first: 100, author: { id: $authorId }, since: $since) {
+              history(first: 100, after: $after, author: { id: $authorId }, since: $since) {
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
                 nodes {
                   oid
                   additions
@@ -170,16 +188,20 @@ async function fetchCommitShasByUserId(
     name: repo.name,
     authorId,
     since,
+    after,
   })) as CommitHistoryResponse;
+  const history = data.repository?.defaultBranchRef?.target?.history;
 
-  return (
-    data.repository?.defaultBranchRef?.target?.history.nodes.map((node) => ({
+  return {
+    commits: history?.nodes.map((node) => ({
       sha: node.oid,
       additions: node.additions,
       deletions: node.deletions,
       changedFiles: node.changedFiles,
-    })) ?? []
-  );
+    })) ?? [],
+    hasNextPage: history?.pageInfo.hasNextPage ?? false,
+    endCursor: history?.pageInfo.endCursor ?? null,
+  };
 }
 
 export async function analyzeCodeVolume(
@@ -208,49 +230,101 @@ export async function analyzeCodeVolume(
 
   const candidates: CommitCandidate[] = [];
 
-  for (
-    let i = 0;
-    i < targetRepositories.length;
-    i += COMMIT_LIST_CONCURRENCY
-  ) {
-    const batch = targetRepositories.slice(i, i + COMMIT_LIST_CONCURRENCY);
-    const results = await Promise.allSettled(
-      batch.map(async (repo) => ({
-        repo,
-        commits: authorId
-          ? await fetchCommitShasByUserId(repo, authorId, since.toISOString())
-          : await githubRest<CommitListItem[]>(
-              `/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}/commits`,
-              {
-                author: login,
-                since: since.toISOString(),
-                per_page: 100,
-                page: 1,
-              }
-            ),
-      }))
-    );
+  if (authorId) {
+    const queue: CommitHistoryState[] = targetRepositories.map((repo) => ({
+      repo,
+      cursor: null,
+    }));
+    const targetCommitCount = safeOptions.commitLimit ?? Number.POSITIVE_INFINITY;
 
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled') {
-        const { repo, commits } = result.value;
-        if (commits.length === 100) {
-          stats.scope.isPartial = true;
-        }
-        for (const commit of commits) {
-          candidates.push({ repo, commit });
-        }
-        return;
-      }
+    while (queue.length > 0 && candidates.length < targetCommitCount) {
+      const batch = queue.splice(0, COMMIT_LIST_CONCURRENCY);
+      const results = await Promise.allSettled(
+        batch.map(async (state) => ({
+          state,
+          page: await fetchCommitShasByUserId(
+            state.repo,
+            authorId,
+            since.toISOString(),
+            state.cursor
+          ),
+        }))
+      );
 
-      stats.scope.isPartial = true;
-      const reason = classifyRestError(result.reason);
-      const repo = batch[index];
-      stats.skippedRepositories.push({
-        nameWithOwner: repo.nameWithOwner,
-        reason: reason === 'unknown' ? 'commit_fetch_failed' : reason,
+      results.forEach((result, index) => {
+        const state = batch[index];
+        if (result.status === 'fulfilled') {
+          for (const commit of result.value.page.commits) {
+            candidates.push({ repo: state.repo, commit });
+          }
+          if (
+            result.value.page.hasNextPage &&
+            candidates.length < targetCommitCount
+          ) {
+            queue.push({
+              repo: state.repo,
+              cursor: result.value.page.endCursor,
+            });
+            stats.scope.isPartial = true;
+          }
+          return;
+        }
+
+        stats.scope.isPartial = true;
+        const reason = classifyRestError(result.reason);
+        stats.skippedRepositories.push({
+          nameWithOwner: state.repo.nameWithOwner,
+          reason: reason === 'unknown' ? 'commit_fetch_failed' : reason,
+        });
       });
-    });
+    }
+
+    if (queue.length > 0) {
+      stats.scope.isPartial = true;
+    }
+  } else {
+    for (
+      let i = 0;
+      i < targetRepositories.length;
+      i += COMMIT_LIST_CONCURRENCY
+    ) {
+      const batch = targetRepositories.slice(i, i + COMMIT_LIST_CONCURRENCY);
+      const results = await Promise.allSettled(
+        batch.map(async (repo) => ({
+          repo,
+          commits: await githubRest<CommitListItem[]>(
+            `/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}/commits`,
+            {
+              author: login,
+              since: since.toISOString(),
+              per_page: 100,
+              page: 1,
+            }
+          ),
+        }))
+      );
+
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          const { repo, commits } = result.value;
+          if (commits.length === 100) {
+            stats.scope.isPartial = true;
+          }
+          for (const commit of commits) {
+            candidates.push({ repo, commit });
+          }
+          return;
+        }
+
+        stats.scope.isPartial = true;
+        const reason = classifyRestError(result.reason);
+        const repo = batch[index];
+        stats.skippedRepositories.push({
+          nameWithOwner: repo.nameWithOwner,
+          reason: reason === 'unknown' ? 'commit_fetch_failed' : reason,
+        });
+      });
+    }
   }
 
   const commitsToAnalyze =

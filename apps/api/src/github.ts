@@ -312,11 +312,15 @@ export async function getGitHubStats(
   const to = ranges[ranges.length - 1].to;
   const repositories = normalizeRepositories(firstYear.login, repositoryNodes);
   const streaks = calculateStreaks(mergedCalendar);
+  const commitLimit = options.commitLimit ?? DEFAULT_COMMIT_LIMIT;
   const [codeVolume, techStack] = await Promise.all([
     analyzeCodeVolume(firstYear.login, repositories, {
       years: DEFAULT_CODE_VOLUME_YEARS,
-      commitLimit: options.commitLimit ?? DEFAULT_COMMIT_LIMIT,
-      repositoryLimit: DEFAULT_REPOSITORY_LIMIT,
+      commitLimit,
+      repositoryLimit:
+        commitLimit === null || commitLimit > 100
+          ? 100
+          : DEFAULT_REPOSITORY_LIMIT,
     }, firstYear.id),
     analyzeTechStack(repositories),
   ]);

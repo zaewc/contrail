@@ -7,7 +7,15 @@ import './styles.css';
 
 type AppState = 'empty' | 'loading' | 'success' | 'error';
 const INITIAL_COMMIT_LIMIT = 100;
-const INCREMENTAL_COMMIT_LIMITS = [200, 300, 400, 500];
+const INCREMENTAL_COMMIT_LIMITS = [
+  300,
+  700,
+  1500,
+  3000,
+  5000,
+  7500,
+  10000,
+];
 
 export const App: React.FC = () => {
   const [input, setInput] = useState('');
@@ -70,11 +78,7 @@ export const App: React.FC = () => {
         const nextAnalyzed = nextStats.codeVolume.summary.commitsAnalyzed;
         setStats(nextStats);
 
-        if (
-          !nextStats.codeVolume.scope.isPartial ||
-          nextAnalyzed <= previousAnalyzed ||
-          nextAnalyzed < commitLimit
-        ) {
+        if (!nextStats.codeVolume.scope.isPartial || nextAnalyzed <= previousAnalyzed) {
           break;
         }
         previousAnalyzed = nextAnalyzed;
