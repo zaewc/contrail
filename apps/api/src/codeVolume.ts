@@ -12,6 +12,9 @@ export const MAX_COMMIT_LIMIT = 1000;
 export const DEFAULT_REPOSITORY_LIMIT = 50;
 export const MAX_REPOSITORY_LIMIT = 100;
 const COMMIT_DETAIL_CONCURRENCY = 8;
+const CODE_VOLUME_TIME_BUDGET_MS = Number(
+  process.env.CODE_VOLUME_TIME_BUDGET_MS ?? 25000
+);
 
 type CommitListItem = {
   sha: string;
@@ -106,6 +109,8 @@ export async function analyzeCodeVolume(
   const languageMap = new Map<string, LanguageVolume>();
   const since = new Date();
   since.setFullYear(since.getFullYear() - safeOptions.years);
+  const deadline = Date.now() + CODE_VOLUME_TIME_BUDGET_MS;
+  const isOutOfTime = () => Date.now() > deadline;
 
   const targetRepositories = repositories.slice(0, safeOptions.repositoryLimit);
   if (repositories.length > targetRepositories.length) {
@@ -113,7 +118,7 @@ export async function analyzeCodeVolume(
   }
 
   for (const repo of targetRepositories) {
-    if (stats.summary.commitsAnalyzed >= safeOptions.commitLimit) {
+    if (stats.summary.commitsAnalyzed >= safeOptions.commitLimit || isOutOfTime()) {
       stats.scope.isPartial = true;
       break;
     }
@@ -146,6 +151,11 @@ export async function analyzeCodeVolume(
 
       let detailFailureReason: string | null = null;
       for (let i = 0; i < commits.length; i += COMMIT_DETAIL_CONCURRENCY) {
+        if (isOutOfTime()) {
+          stats.scope.isPartial = true;
+          break;
+        }
+
         const batch = commits.slice(i, i + COMMIT_DETAIL_CONCURRENCY);
         const results = await Promise.allSettled(
           batch.map((commit) =>
