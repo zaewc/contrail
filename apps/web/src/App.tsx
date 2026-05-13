@@ -7,6 +7,7 @@ import './styles.css';
 
 type AppState = 'empty' | 'loading' | 'success' | 'error';
 const INITIAL_COMMIT_LIMIT = 100;
+const FINAL_COMMIT_LIMIT = 10000;
 const INCREMENTAL_COMMIT_LIMITS = [
   300,
   700,
@@ -111,6 +112,15 @@ export const App: React.FC = () => {
     });
   };
   const formatNumber = (n: number): string => n.toLocaleString('en-US');
+  const isCodeVolumeLoading = Boolean(
+    stats &&
+      stats.codeVolume.scope.isPartial &&
+      stats.codeVolume.scope.commitLimit !== null &&
+      stats.codeVolume.scope.commitLimit < FINAL_COMMIT_LIMIT
+  );
+  const codeMetricClassName = isCodeVolumeLoading
+    ? 'metric-grid metric-grid-loading'
+    : 'metric-grid';
 
   return (
     <div className="container">
@@ -187,31 +197,50 @@ export const App: React.FC = () => {
                 {stats.codeVolume.scope.commitLimit === null
                   ? '커밋 제한 없음'
                   : `최대 ${formatNumber(stats.codeVolume.scope.commitLimit)}커밋`}
+                {isCodeVolumeLoading && <span className="inline-spinner" />}
               </div>
-              <div className="metric-grid">
+              <div className={codeMetricClassName}>
                 <div>
                   <span>Lines added</span>
-                  <strong>{formatNumber(stats.codeVolume.summary.additions)}</strong>
+                  <strong>
+                    {formatNumber(stats.codeVolume.summary.additions)}
+                    {isCodeVolumeLoading && <span className="loading-dots">...</span>}
+                  </strong>
                 </div>
                 <div>
                   <span>Lines deleted</span>
-                  <strong>{formatNumber(stats.codeVolume.summary.deletions)}</strong>
+                  <strong>
+                    {formatNumber(stats.codeVolume.summary.deletions)}
+                    {isCodeVolumeLoading && <span className="loading-dots">...</span>}
+                  </strong>
                 </div>
                 <div>
                   <span>Total changes</span>
-                  <strong>{formatNumber(stats.codeVolume.summary.changes)}</strong>
+                  <strong>
+                    {formatNumber(stats.codeVolume.summary.changes)}
+                    {isCodeVolumeLoading && <span className="loading-dots">...</span>}
+                  </strong>
                 </div>
                 <div>
                   <span>Files changed</span>
-                  <strong>{formatNumber(stats.codeVolume.summary.filesChanged)}</strong>
+                  <strong>
+                    {formatNumber(stats.codeVolume.summary.filesChanged)}
+                    {isCodeVolumeLoading && <span className="loading-dots">...</span>}
+                  </strong>
                 </div>
                 <div>
                   <span>Commits analyzed</span>
-                  <strong>{formatNumber(stats.codeVolume.summary.commitsAnalyzed)}</strong>
+                  <strong>
+                    {formatNumber(stats.codeVolume.summary.commitsAnalyzed)}
+                    {isCodeVolumeLoading && <span className="loading-dots">...</span>}
+                  </strong>
                 </div>
                 <div>
                   <span>Repositories analyzed</span>
-                  <strong>{formatNumber(stats.codeVolume.summary.repositoriesAnalyzed)}</strong>
+                  <strong>
+                    {formatNumber(stats.codeVolume.summary.repositoriesAnalyzed)}
+                    {isCodeVolumeLoading && <span className="loading-dots">...</span>}
+                  </strong>
                 </div>
               </div>
               {stats.codeVolume.scope.isPartial && (
