@@ -47,6 +47,14 @@ export function renderStatsSvg(stats) {
     const width = 450;
     const height = 320;
     const formatNumber = (n) => n.toLocaleString('en-US');
+    const formatCompact = (n) => Intl.NumberFormat('en-US', {
+        notation: 'compact',
+        maximumFractionDigits: 1,
+    }).format(n);
+    const topStack = stats.techStack
+        .slice(0, 3)
+        .map((item) => item.name)
+        .join(' · ') || 'N/A';
     const preview = renderContributionPreview(stats);
     const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg
@@ -110,6 +118,11 @@ export function renderStatsSvg(stats) {
     <rect x="20" y="180" width="90" height="60" class="contrail-border" rx="4"/>
     <text class="contrail-text contrail-stat-value" x="30" y="210">${formatNumber(stats.totals.repositories)}</text>
     <text class="contrail-text contrail-stat-label" x="30" y="230">Repos</text>
+
+    <!-- Advanced Summary -->
+    <text class="contrail-text contrail-label" x="20" y="260">Max streak: ${formatNumber(stats.streaks.max)} days</text>
+    <text class="contrail-text contrail-label" x="20" y="278">Code changes: ${formatCompact(stats.codeVolume.summary.changes)}</text>
+    <text class="contrail-text contrail-label" x="20" y="296">Top stack: ${escapeXml(topStack)}</text>
   </g>
 
   <!-- Contribution Preview -->

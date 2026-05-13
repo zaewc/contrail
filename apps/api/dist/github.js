@@ -1,36 +1,10 @@
 import { z } from 'zod';
-const GITHUB_GRAPHQL_URL = 'https://api.github.com/graphql';
+import { queryGitHubGraphQL } from './githubClient.js';
+import { calculateStreaks } from './streaks.js';
+import { analyzeCodeVolume, DEFAULT_CODE_VOLUME_YEARS, DEFAULT_COMMIT_LIMIT, DEFAULT_REPOSITORY_LIMIT, } from './codeVolume.js';
+import { analyzeTechStack } from './techStack.js';
+import { analyzeContributionTypeRatios } from './contributionRatios.js';
 const loginSchema = z.string().min(1).max(39);
-async function queryGitHubGraphQL(query, variables) {
-    const token = process.env.GITHUB_TOKEN;
-    if (!token) {
-        throw new Error('GITHUB_TOKEN environment variable is not set');
-    }
-    const response = await fetch(GITHUB_GRAPHQL_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ query, variables }),
-    });
-    if (!response.ok) {
-        throw new Error(`GitHub API error: ${response.status}`);
-    }
-    const data = await response.json();
-    if (data.errors) {
-        const errorMessage = data.errors[0]?.message || 'Unknown error';
-        if (errorMessage.includes('Could not resolve to a User')) {
-            throw new Error('USER_NOT_FOUND');
-        }
-        if (errorMessage.includes('Bad credentials') ||
-            errorMessage.includes('API rate limit')) {
-            throw new Error('GITHUB_API_ERROR');
-        }
-        throw new Error(errorMessage);
-    }
-    return data.data;
-}
 function mergeCalendars(calendars) {
     const dateMap = new Map();
     for (const calendar of calendars) {
@@ -45,6 +19,51 @@ function mergeCalendars(calendars) {
         }
     }
     return Array.from(dateMap.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+}
+function repositoryFields() {
+    return `
+    nameWithOwner
+    name
+    url
+    isPrivate
+    isFork
+    isArchived
+    primaryLanguage {
+      name
+    }
+    stargazerCount
+    forkCount
+    owner {
+      login
+      __typename
+    }
+  `;
+}
+function normalizeRepositories(login, nodes) {
+    const seen = new Map();
+    const lowerLogin = login.toLowerCase();
+    for (const node of nodes) {
+        if (!node) {
+            continue;
+        }
+        const owner = node.owner.login;
+        const isPersonal = owner.toLowerCase() === lowerLogin;
+        seen.set(node.nameWithOwner, {
+            nameWithOwner: node.nameWithOwner,
+            owner,
+            name: node.name,
+            url: node.url,
+            isPrivate: node.isPrivate,
+            isFork: node.isFork,
+            isArchived: node.isArchived,
+            isPersonal,
+            isOrganization: !isPersonal,
+            primaryLanguage: node.primaryLanguage?.name ?? null,
+            stargazerCount: node.stargazerCount,
+            forkCount: node.forkCount,
+        });
+    }
+    return [...seen.values()].sort((a, b) => a.nameWithOwner.localeCompare(b.nameWithOwner));
 }
 async function getUserDataForYear(login, fromDate, toDate) {
     const query = `
@@ -67,14 +86,27 @@ async function getUserDataForYear(login, fromDate, toDate) {
           totalCommitContributions
           totalPullRequestContributions
           totalIssueContributions
+          totalPullRequestReviewContributions
           restrictedContributionsCount
         }
+        repositories(
+          first: 100
+          ownerAffiliations: OWNER
+          orderBy: { field: PUSHED_AT, direction: DESC }
+        ) {
+          nodes {
+            ${repositoryFields()}
+          }
+        }
         repositoriesContributedTo(
-          first: 1
-          contributionTypes: [COMMIT, ISSUE, PULL_REQUEST, REPOSITORY]
+          first: 100
+          contributionTypes: [COMMIT, ISSUE, PULL_REQUEST, PULL_REQUEST_REVIEW, REPOSITORY]
           includeUserRepositories: true
         ) {
           totalCount
+          nodes {
+            ${repositoryFields()}
+          }
         }
       }
     }
@@ -113,9 +145,11 @@ async function getUserDataForYear(login, fromDate, toDate) {
             totalCommitContributions: data.user.contributionsCollection.totalCommitContributions,
             totalPullRequestContributions: data.user.contributionsCollection.totalPullRequestContributions,
             totalIssueContributions: data.user.contributionsCollection.totalIssueContributions,
+            totalPullRequestReviewContributions: data.user.contributionsCollection.totalPullRequestReviewContributions,
             restrictedContributionsCount: data.user.contributionsCollection.restrictedContributionsCount,
         },
         repositoriesContributedTo: data.user.repositoriesContributedTo,
+        repositories: data.user.repositories,
     };
 }
 export async function getGitHubStats(login) {
@@ -166,7 +200,9 @@ export async function getGitHubStats(login) {
     let totalCommits = 0;
     let totalPullRequests = 0;
     let totalIssues = 0;
+    let totalPullRequestReviews = 0;
     let totalRestricted = 0;
+    const repositoryNodes = [];
     for (const yearData of allYearData) {
         totalContributions +=
             yearData.contributionsCollection.contributionCalendar.totalContributions;
@@ -176,13 +212,25 @@ export async function getGitHubStats(login) {
             yearData.contributionsCollection.totalPullRequestContributions;
         totalIssues +=
             yearData.contributionsCollection.totalIssueContributions;
+        totalPullRequestReviews +=
+            yearData.contributionsCollection.totalPullRequestReviewContributions;
         totalRestricted +=
             yearData.contributionsCollection.restrictedContributionsCount;
+        repositoryNodes.push(...yearData.repositories.nodes, ...yearData.repositoriesContributedTo.nodes);
     }
     // Repository count from last year (most recent)
     const repositoryCount = allYearData[allYearData.length - 1].repositoriesContributedTo.totalCount;
     const from = ranges[0].from;
     const to = ranges[ranges.length - 1].to;
+    const repositories = normalizeRepositories(firstYear.login, repositoryNodes);
+    const streaks = calculateStreaks(mergedCalendar);
+    const codeVolume = await analyzeCodeVolume(firstYear.login, repositories, {
+        years: DEFAULT_CODE_VOLUME_YEARS,
+        commitLimit: DEFAULT_COMMIT_LIMIT,
+        repositoryLimit: DEFAULT_REPOSITORY_LIMIT,
+    });
+    const techStack = await analyzeTechStack(repositories);
+    const contributionTypeRatios = await analyzeContributionTypeRatios(firstYear.login, repositories, codeVolume);
     return {
         login: firstYear.login,
         name: firstYear.name,
@@ -197,9 +245,15 @@ export async function getGitHubStats(login) {
             commits: totalCommits,
             pullRequests: totalPullRequests,
             issues: totalIssues,
-            repositories: repositoryCount,
+            pullRequestReviews: totalPullRequestReviews,
+            repositories: Math.max(repositoryCount, repositories.length),
             restrictedContributions: totalRestricted,
         },
         calendar: mergedCalendar,
+        streaks,
+        repositories,
+        techStack,
+        codeVolume,
+        contributionTypeRatios,
     };
 }

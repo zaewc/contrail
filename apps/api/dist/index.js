@@ -1,3 +1,4 @@
+import 'dotenv/config.js';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { getGitHubStats } from './github.js';
@@ -5,6 +6,8 @@ import { getCached, setCached } from './cache.js';
 import { renderStatsSvg } from './svg.js';
 const PORT = parseInt(process.env.PORT || '4000', 10);
 const CACHE_TTL = parseInt(process.env.CACHE_TTL_SECONDS || '21600', 10);
+const statsCacheKey = (login) => `github:stats:${login.toLowerCase()}:v2`;
+const svgCacheKey = (login) => `svg:${login.toLowerCase()}:v2`;
 const fastify = Fastify({
     logger: true,
 });
@@ -20,14 +23,14 @@ fastify.get('/health', async () => {
 fastify.get('/api/users/:login/stats', async (request, reply) => {
     const { login } = request.params;
     // Check cache
-    const cached = getCached(`stats:${login}`);
+    const cached = getCached(statsCacheKey(login));
     if (cached) {
         return cached;
     }
     try {
         const stats = await getGitHubStats(login);
         // Cache the result
-        setCached(`stats:${login}`, stats, CACHE_TTL);
+        setCached(statsCacheKey(login), stats, CACHE_TTL);
         return stats;
     }
     catch (error) {
@@ -56,7 +59,7 @@ fastify.get('/api/users/:login/stats', async (request, reply) => {
 fastify.get('/api/users/:login/card.svg', async (request, reply) => {
     const { login } = request.params;
     // Check cache
-    const cached = getCached(`svg:${login}`);
+    const cached = getCached(svgCacheKey(login));
     if (cached) {
         reply
             .type('image/svg+xml')
@@ -67,7 +70,7 @@ fastify.get('/api/users/:login/card.svg', async (request, reply) => {
         const stats = await getGitHubStats(login);
         const svg = renderStatsSvg(stats);
         // Cache the result
-        setCached(`svg:${login}`, svg, CACHE_TTL);
+        setCached(svgCacheKey(login), svg, CACHE_TTL);
         reply
             .type('image/svg+xml')
             .header('Cache-Control', `public, max-age=${CACHE_TTL}`);
