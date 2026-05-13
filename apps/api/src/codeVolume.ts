@@ -108,7 +108,8 @@ function emptyStats(options: CodeVolumeOptions): CodeVolumeStats {
 export async function analyzeCodeVolume(
   login: string,
   repositories: ContributedRepository[],
-  options: CodeVolumeOptions
+  options: CodeVolumeOptions,
+  commitShasByRepository?: Map<string, Set<string>>
 ): Promise<CodeVolumeStats> {
   const safeOptions = {
     years: Math.max(1, options.years),
@@ -130,7 +131,23 @@ export async function analyzeCodeVolume(
 
   const candidates: CommitCandidate[] = [];
 
-  for (let i = 0; i < targetRepositories.length; i += COMMIT_LIST_CONCURRENCY) {
+  if (commitShasByRepository) {
+    for (const repo of targetRepositories) {
+      const shas = commitShasByRepository.get(repo.nameWithOwner);
+      if (!shas) {
+        continue;
+      }
+      for (const sha of shas) {
+        candidates.push({ repo, commit: { sha } });
+      }
+    }
+  }
+
+  for (
+    let i = 0;
+    !commitShasByRepository && i < targetRepositories.length;
+    i += COMMIT_LIST_CONCURRENCY
+  ) {
     const batch = targetRepositories.slice(i, i + COMMIT_LIST_CONCURRENCY);
     const results = await Promise.allSettled(
       batch.map(async (repo) => ({

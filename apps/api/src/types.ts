@@ -133,6 +133,16 @@ export interface GitHubUserData {
     totalIssueContributions: number;
     totalPullRequestReviewContributions: number;
     restrictedContributionsCount: number;
+    commitContributionsByRepository: Array<{
+      repository: GitHubRepositoryNode;
+      contributions: {
+        nodes: Array<{
+          commit: {
+            oid: string;
+          };
+        }>;
+      };
+    }>;
   };
   repositoriesContributedTo: {
     totalCount: number;

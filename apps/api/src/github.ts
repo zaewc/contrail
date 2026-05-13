@@ -125,6 +125,18 @@ async function getUserDataForYear(
           totalIssueContributions
           totalPullRequestReviewContributions
           restrictedContributionsCount
+          commitContributionsByRepository(maxRepositories: 100) {
+            repository {
+              ${repositoryFields()}
+            }
+            contributions(first: 100) {
+              nodes {
+                commit {
+                  oid
+                }
+              }
+            }
+          }
         }
         repositories(
           first: 100
@@ -193,6 +205,8 @@ async function getUserDataForYear(
         data.user.contributionsCollection.totalPullRequestReviewContributions,
       restrictedContributionsCount:
         data.user.contributionsCollection.restrictedContributionsCount,
+      commitContributionsByRepository:
+        data.user.contributionsCollection.commitContributionsByRepository,
     },
     repositoriesContributedTo:
       data.user.repositoriesContributedTo,
@@ -282,6 +296,7 @@ export async function getGitHubStats(
   let totalPullRequestReviews = 0;
   let totalRestricted = 0;
   const repositoryNodes: GitHubRepositoryNode[] = [];
+  const commitShasByRepository = new Map<string, Set<string>>();
 
   for (const yearData of allYearData) {
     totalContributions +=
@@ -298,8 +313,21 @@ export async function getGitHubStats(
       yearData.contributionsCollection.restrictedContributionsCount;
     repositoryNodes.push(
       ...yearData.repositories.nodes,
-      ...yearData.repositoriesContributedTo.nodes
+      ...yearData.repositoriesContributedTo.nodes,
+      ...yearData.contributionsCollection.commitContributionsByRepository.map(
+        (item) => item.repository
+      )
     );
+    for (const item of yearData.contributionsCollection
+      .commitContributionsByRepository) {
+      const shas =
+        commitShasByRepository.get(item.repository.nameWithOwner) ??
+        new Set<string>();
+      for (const node of item.contributions.nodes) {
+        shas.add(node.commit.oid);
+      }
+      commitShasByRepository.set(item.repository.nameWithOwner, shas);
+    }
   }
 
   // Repository count from last year (most recent)
@@ -315,7 +343,7 @@ export async function getGitHubStats(
       years: DEFAULT_CODE_VOLUME_YEARS,
       commitLimit: options.commitLimit ?? DEFAULT_COMMIT_LIMIT,
       repositoryLimit: DEFAULT_REPOSITORY_LIMIT,
-    }),
+    }, commitShasByRepository),
     analyzeTechStack(repositories),
   ]);
   const contributionTypeRatios =
