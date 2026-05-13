@@ -27,6 +27,10 @@ export const StatsCard: React.FC<StatsCardProps> = ({ stats }) => {
         <div className="stat-label">Issues</div>
       </div>
       <div className="stat-card">
+        <div className="stat-value">{formatNumber(stats.totals.pullRequestReviews)}</div>
+        <div className="stat-label">Reviews</div>
+      </div>
+      <div className="stat-card">
         <div className="stat-value">{formatNumber(stats.totals.repositories)}</div>
         <div className="stat-label">Repositories</div>
       </div>

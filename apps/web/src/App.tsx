@@ -57,6 +57,13 @@ export const App: React.FC = () => {
       day: 'numeric',
     });
   };
+  const formatNumber = (n: number): string => n.toLocaleString('en-US');
+  const formatBytes = (bytes: number): string =>
+    Intl.NumberFormat('en-US', {
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    }).format(bytes);
+  const formatPercent = (n: number): string => `${n.toFixed(1)}%`;
 
   return (
     <div className="container">
@@ -107,6 +114,135 @@ export const App: React.FC = () => {
           </div>
 
           <StatsCard stats={stats} />
+
+          <div className="analysis-grid">
+            <section className="analysis-card">
+              <h3>Streak</h3>
+              <div className="metric-row">
+                <span>Current streak</span>
+                <strong>{formatNumber(stats.streaks.current)} days</strong>
+              </div>
+              <div className="metric-row">
+                <span>Max streak</span>
+                <strong>{formatNumber(stats.streaks.max)} days</strong>
+              </div>
+              <div className="metric-note">
+                {stats.streaks.maxStartDate && stats.streaks.maxEndDate
+                  ? `${stats.streaks.maxStartDate} → ${stats.streaks.maxEndDate}`
+                  : 'No active streak in this range'}
+              </div>
+            </section>
+
+            <section className="analysis-card">
+              <h3>작성 커밋 기준 코드 변경량</h3>
+              <div className="scope-note">
+                최근 {stats.codeVolume.scope.years}년, 최대{' '}
+                {formatNumber(stats.codeVolume.scope.commitLimit)}개 커밋 기준
+              </div>
+              <div className="metric-grid">
+                <div>
+                  <span>Lines added</span>
+                  <strong>{formatNumber(stats.codeVolume.summary.additions)}</strong>
+                </div>
+                <div>
+                  <span>Lines deleted</span>
+                  <strong>{formatNumber(stats.codeVolume.summary.deletions)}</strong>
+                </div>
+                <div>
+                  <span>Total changes</span>
+                  <strong>{formatNumber(stats.codeVolume.summary.changes)}</strong>
+                </div>
+                <div>
+                  <span>Files changed</span>
+                  <strong>{formatNumber(stats.codeVolume.summary.filesChanged)}</strong>
+                </div>
+                <div>
+                  <span>Commits analyzed</span>
+                  <strong>{formatNumber(stats.codeVolume.summary.commitsAnalyzed)}</strong>
+                </div>
+                <div>
+                  <span>Repositories analyzed</span>
+                  <strong>{formatNumber(stats.codeVolume.summary.repositoriesAnalyzed)}</strong>
+                </div>
+              </div>
+              {stats.codeVolume.scope.isPartial && (
+                <div className="partial-note">
+                  Some repositories may be partial due to GitHub API limits.
+                </div>
+              )}
+            </section>
+          </div>
+
+          <section className="analysis-card full-width">
+            <h3>기여 레포 기준 기술스택</h3>
+            <div className="bar-list">
+              {stats.techStack.slice(0, 8).map((item) => (
+                <div className="bar-row" key={item.name}>
+                  <div className="bar-label">
+                    <strong>{item.name}</strong>
+                    <span>
+                      {formatPercent(item.percentage)} · {formatBytes(item.bytes)} ·{' '}
+                      {formatNumber(item.repositories)} repos
+                    </span>
+                  </div>
+                  <div className="bar-track">
+                    <div
+                      className="bar-fill tech"
+                      style={{ width: `${Math.max(item.percentage, 2)}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+              {stats.techStack.length === 0 && (
+                <div className="metric-note">No language data available.</div>
+              )}
+            </div>
+          </section>
+
+          <section className="analysis-card full-width">
+            <h3>Contribution type ratio</h3>
+            <div className="ratio-list">
+              {stats.contributionTypeRatios.map((ratio) => (
+                <div className="ratio-row" key={ratio.scope}>
+                  <div className="ratio-title">
+                    <strong>
+                      {ratio.scope === 'personal' ? 'Personal' : 'Organization'}
+                    </strong>
+                    <span>{formatNumber(ratio.totals.total)} contributions</span>
+                  </div>
+                  <div className="stacked-bar">
+                    <div
+                      className="stack commits"
+                      style={{ width: `${ratio.ratios.commits}%` }}
+                    />
+                    <div
+                      className="stack prs"
+                      style={{ width: `${ratio.ratios.pullRequests}%` }}
+                    />
+                    <div
+                      className="stack issues"
+                      style={{ width: `${ratio.ratios.issues}%` }}
+                    />
+                    <div
+                      className="stack reviews"
+                      style={{ width: `${ratio.ratios.pullRequestReviews}%` }}
+                    />
+                  </div>
+                  <div className="ratio-legend">
+                    <span>commits {formatPercent(ratio.ratios.commits)}</span>
+                    <span>PRs {formatPercent(ratio.ratios.pullRequests)}</span>
+                    <span>Issues {formatPercent(ratio.ratios.issues)}</span>
+                    <span>Reviews {formatPercent(ratio.ratios.pullRequestReviews)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {stats.contributionTypeRatios.some((ratio) => ratio.isPartial) && (
+              <div className="partial-note">
+                Some values may be partial due to GitHub API limitations.
+              </div>
+            )}
+          </section>
 
           <div className="contribution-section">
             <h3>잔디</h3>
