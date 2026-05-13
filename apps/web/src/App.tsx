@@ -131,7 +131,10 @@ export const App: React.FC = () => {
             <section className="analysis-card">
               <h3>작성 커밋 기준 코드 변경량</h3>
               <div className="scope-note">
-                최근 {stats.codeVolume.scope.years}년, 커밋 제한 없음
+                최근 {stats.codeVolume.scope.years}년,{' '}
+                {stats.codeVolume.scope.commitLimit === null
+                  ? '커밋 제한 없음'
+                  : `최대 ${formatNumber(stats.codeVolume.scope.commitLimit)}커밋`}
               </div>
               <div className="metric-grid">
                 <div>

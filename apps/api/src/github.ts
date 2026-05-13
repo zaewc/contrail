@@ -221,28 +221,39 @@ export async function getGitHubStats(login: string): Promise<GitHubStats> {
   ranges.reverse();
 
   // Fetch data for each year
-  const allYearData: GitHubUserData[] = [];
-  const allCalendars: ContributionDay[][] = [];
-
-  for (const range of ranges) {
-    try {
-      const yearData = await getUserDataForYear(
+  const yearResults = await Promise.allSettled(
+    ranges.map((range) =>
+      getUserDataForYear(
         login,
         range.from.toISOString(),
         range.to.toISOString()
-      );
+      )
+    )
+  );
+  const allYearData: GitHubUserData[] = [];
+  const allCalendars: ContributionDay[][] = [];
+
+  for (const result of yearResults) {
+    if (result.status === 'fulfilled') {
+      const yearData = result.value;
       allYearData.push(yearData);
       allCalendars.push(
         yearData.contributionsCollection.contributionCalendar.weeks.flatMap(
           (w) => w.contributionDays
         )
       );
-    } catch (error: any) {
+      continue;
+    }
+
+    const error = result.reason;
+    if (error instanceof Error) {
       if (error.message === 'USER_NOT_FOUND') {
         throw error;
       }
       // Skip year on partial failure
       console.error(`Failed to fetch data for year: ${error.message}`);
+    } else {
+      console.error('Failed to fetch data for year');
     }
   }
 
@@ -300,11 +311,14 @@ export async function getGitHubStats(login: string): Promise<GitHubStats> {
     }),
     analyzeTechStack(repositories),
   ]);
-  const contributionTypeRatios = await analyzeContributionTypeRatios(
-    firstYear.login,
-    repositories,
-    codeVolume
-  );
+  const contributionTypeRatios =
+    process.env.ANALYZE_CONTRIBUTION_RATIOS === 'true'
+      ? await analyzeContributionTypeRatios(
+          firstYear.login,
+          repositories,
+          codeVolume
+        )
+      : [];
 
   return {
     login: firstYear.login,

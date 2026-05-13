@@ -9,8 +9,9 @@ import type { GitHubStats } from './types.js';
 const PORT = parseInt(process.env.PORT || '4000', 10);
 const CACHE_TTL = parseInt(process.env.CACHE_TTL_SECONDS || '21600', 10);
 const statsCacheKey = (login: string) =>
-  `github:stats:${login.toLowerCase()}:v2`;
+  `github:stats:${login.toLowerCase()}:v4`;
 const svgCacheKey = (login: string) => `svg:${login.toLowerCase()}:v2`;
+const pendingStatsRequests = new Map<string, Promise<GitHubStats>>();
 
 const fastify = Fastify({
   logger: true,
@@ -39,12 +40,24 @@ fastify.get<{ Params: { login: string } }>(
     }
 
     try {
-      const stats = await getGitHubStats(login);
+      const key = statsCacheKey(login);
+      const pending = pendingStatsRequests.get(key);
+      const stats =
+        pending ??
+        getGitHubStats(login).finally(() => {
+          pendingStatsRequests.delete(key);
+        });
+
+      if (!pending) {
+        pendingStatsRequests.set(key, stats);
+      }
+
+      const resolvedStats = await stats;
 
       // Cache the result
-      setCached(statsCacheKey(login), stats, CACHE_TTL);
+      setCached(key, resolvedStats, CACHE_TTL);
 
-      return stats;
+      return resolvedStats;
     } catch (error: any) {
       if (error.message === 'USER_NOT_FOUND') {
         reply.code(404).send({ error: 'User not found' });

@@ -72,7 +72,7 @@ export async function analyzeContributionTypeRatios(
     personal: emptyTotals(),
     organization: emptyTotals(),
   };
-  let isPartial = true;
+  let isPartial = false;
 
   for (const repo of repositories) {
     const commits = codeVolume?.commitCountsByRepository?.[repo.nameWithOwner] ?? 0;
@@ -87,23 +87,36 @@ export async function analyzeContributionTypeRatios(
       repositories.filter((repo) => repo.isOrganization).map((repo) => repo.owner)
     );
 
-    for (const owner of personalOwners) {
-      totals.personal.pullRequests += await countSearch(
-        `author:${login} type:pr user:${owner}`
-      );
-      totals.personal.issues += await countSearch(
-        `author:${login} type:issue user:${owner}`
-      );
-    }
-
-    for (const owner of organizationOwners) {
-      totals.organization.pullRequests += await countSearch(
-        `author:${login} type:pr user:${owner}`
-      );
-      totals.organization.issues += await countSearch(
-        `author:${login} type:issue user:${owner}`
-      );
-    }
+    const personalResults = await Promise.all(
+      [...personalOwners].flatMap((owner) => [
+        countSearch(`author:${login} type:pr user:${owner}`).then(
+          (count) => {
+            totals.personal.pullRequests += count;
+          }
+        ),
+        countSearch(`author:${login} type:issue user:${owner}`).then(
+          (count) => {
+            totals.personal.issues += count;
+          }
+        ),
+      ])
+    );
+    const organizationResults = await Promise.all(
+      [...organizationOwners].flatMap((owner) => [
+        countSearch(`author:${login} type:pr user:${owner}`).then(
+          (count) => {
+            totals.organization.pullRequests += count;
+          }
+        ),
+        countSearch(`author:${login} type:issue user:${owner}`).then(
+          (count) => {
+            totals.organization.issues += count;
+          }
+        ),
+      ])
+    );
+    void personalResults;
+    void organizationResults;
   } catch {
     isPartial = true;
   }

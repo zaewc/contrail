@@ -7,14 +7,31 @@ import {
 } from './types.js';
 
 export const DEFAULT_CODE_VOLUME_YEARS = 5;
-export const DEFAULT_COMMIT_LIMIT = null;
+function readPositiveIntegerEnv(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+export const DEFAULT_COMMIT_LIMIT = readPositiveIntegerEnv(
+  'CODE_VOLUME_COMMIT_LIMIT',
+  100
+);
 export const MAX_COMMIT_LIMIT = 1000;
-export const DEFAULT_REPOSITORY_LIMIT = 100;
+export const DEFAULT_REPOSITORY_LIMIT = readPositiveIntegerEnv(
+  'CODE_VOLUME_REPOSITORY_LIMIT',
+  20
+);
 export const MAX_REPOSITORY_LIMIT = 100;
 const COMMIT_DETAIL_CONCURRENCY = 8;
+const COMMIT_LIST_CONCURRENCY = 8;
 
 type CommitListItem = {
   sha: string;
+};
+
+type CommitCandidate = {
+  repo: ContributedRepository;
+  commit: CommitListItem;
 };
 
 type CommitDetail = {
@@ -111,90 +128,96 @@ export async function analyzeCodeVolume(
     stats.scope.isPartial = true;
   }
 
-  for (const repo of targetRepositories) {
-    if (
-      safeOptions.commitLimit !== null &&
-      stats.summary.commitsAnalyzed >= safeOptions.commitLimit
-    ) {
-      stats.scope.isPartial = true;
-      break;
-    }
+  const candidates: CommitCandidate[] = [];
 
-    try {
-      let repoCommitCount = 0;
-      let page = 1;
-      let commits: CommitListItem[] = [];
-
-      while (
-        safeOptions.commitLimit === null ||
-        stats.summary.commitsAnalyzed + commits.length < safeOptions.commitLimit
-      ) {
-        const pageCommits = await githubRest<CommitListItem[]>(
+  for (let i = 0; i < targetRepositories.length; i += COMMIT_LIST_CONCURRENCY) {
+    const batch = targetRepositories.slice(i, i + COMMIT_LIST_CONCURRENCY);
+    const results = await Promise.allSettled(
+      batch.map(async (repo) => ({
+        repo,
+        commits: await githubRest<CommitListItem[]>(
           `/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}/commits`,
           {
             author: login,
             since: since.toISOString(),
             per_page: 100,
-            page,
+            page: 1,
           }
-        );
+        ),
+      }))
+    );
 
-        commits = commits.concat(pageCommits);
-        if (pageCommits.length < 100) {
-          break;
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        const { repo, commits } = result.value;
+        if (commits.length === 100) {
+          stats.scope.isPartial = true;
         }
-        page += 1;
-      }
-
-      if (safeOptions.commitLimit !== null) {
-        const remaining = safeOptions.commitLimit - stats.summary.commitsAnalyzed;
-        commits = commits.slice(0, remaining);
-      }
-
-      let detailFailureReason: string | null = null;
-      for (let i = 0; i < commits.length; i += COMMIT_DETAIL_CONCURRENCY) {
-        const batch = commits.slice(i, i + COMMIT_DETAIL_CONCURRENCY);
-        const results = await Promise.allSettled(
-          batch.map((commit) =>
-            githubRest<CommitDetail>(
-              `/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}/commits/${commit.sha}`
-            )
-          )
-        );
-
-        for (const result of results) {
-          if (result.status === 'fulfilled') {
-            addCommitDetailToStats(result.value, stats, languageMap);
-            repoCommitCount += 1;
-          } else {
-            stats.scope.isPartial = true;
-            detailFailureReason =
-              classifyRestError(result.reason) === 'rate_limited'
-                ? 'rate_limited'
-                : 'commit_detail_failed';
-          }
+        for (const commit of commits) {
+          candidates.push({ repo, commit });
         }
+        return;
       }
 
-      if (detailFailureReason) {
-        stats.skippedRepositories.push({
-          nameWithOwner: repo.nameWithOwner,
-          reason: detailFailureReason,
-        });
-      }
-
-      if (repoCommitCount > 0) {
-        stats.summary.repositoriesAnalyzed += 1;
-        stats.commitCountsByRepository![repo.nameWithOwner] = repoCommitCount;
-      }
-    } catch (error) {
       stats.scope.isPartial = true;
-      const reason = classifyRestError(error);
+      const reason = classifyRestError(result.reason);
+      const repo = batch[index];
       stats.skippedRepositories.push({
         nameWithOwner: repo.nameWithOwner,
         reason: reason === 'unknown' ? 'commit_fetch_failed' : reason,
       });
-    }
+    });
+  }
+
+  const commitsToAnalyze =
+    safeOptions.commitLimit === null
+      ? candidates
+      : candidates.slice(0, safeOptions.commitLimit);
+  if (commitsToAnalyze.length < candidates.length) {
+    stats.scope.isPartial = true;
+  }
+
+  const commitCountsByRepository = new Map<string, number>();
+  const detailFailureByRepository = new Map<string, string>();
+
+  for (let i = 0; i < commitsToAnalyze.length; i += COMMIT_DETAIL_CONCURRENCY) {
+    const batch = commitsToAnalyze.slice(i, i + COMMIT_DETAIL_CONCURRENCY);
+    const results = await Promise.allSettled(
+      batch.map(({ repo, commit }) =>
+        githubRest<CommitDetail>(
+          `/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}/commits/${commit.sha}`
+        )
+      )
+    );
+
+    results.forEach((result, index) => {
+      const { repo } = batch[index];
+      if (result.status === 'fulfilled') {
+        addCommitDetailToStats(result.value, stats, languageMap);
+        commitCountsByRepository.set(
+          repo.nameWithOwner,
+          (commitCountsByRepository.get(repo.nameWithOwner) ?? 0) + 1
+        );
+        return;
+      }
+
+      stats.scope.isPartial = true;
+      detailFailureByRepository.set(
+        repo.nameWithOwner,
+        classifyRestError(result.reason) === 'rate_limited'
+          ? 'rate_limited'
+          : 'commit_detail_failed'
+      );
+    });
+  }
+
+  for (const [nameWithOwner, count] of commitCountsByRepository) {
+    stats.summary.repositoriesAnalyzed += 1;
+    stats.commitCountsByRepository![nameWithOwner] = count;
+  }
+
+  for (const [nameWithOwner, reason] of detailFailureByRepository) {
+    stats.skippedRepositories.push({ nameWithOwner, reason });
   }
 
   stats.byLanguage = [...languageMap.values()].sort(
