@@ -174,7 +174,7 @@ export const App: React.FC = () => {
           </div>
 
           <section className="analysis-card full-width">
-            <h3>기여 레포 기준 기술스택</h3>
+            <h3>기술스택</h3>
             <div className="bar-list">
               {stats.techStack.slice(0, 8).map((item) => (
                 <div className="bar-row" key={item.name}>
@@ -197,51 +197,6 @@ export const App: React.FC = () => {
                 <div className="metric-note">No language data available.</div>
               )}
             </div>
-          </section>
-
-          <section className="analysis-card full-width">
-            <h3>Contribution type ratio</h3>
-            <div className="ratio-list">
-              {stats.contributionTypeRatios.map((ratio) => (
-                <div className="ratio-row" key={ratio.scope}>
-                  <div className="ratio-title">
-                    <strong>
-                      {ratio.scope === 'personal' ? 'Personal' : 'Organization'}
-                    </strong>
-                    <span>{formatNumber(ratio.totals.total)} contributions</span>
-                  </div>
-                  <div className="stacked-bar">
-                    <div
-                      className="stack commits"
-                      style={{ width: `${ratio.ratios.commits}%` }}
-                    />
-                    <div
-                      className="stack prs"
-                      style={{ width: `${ratio.ratios.pullRequests}%` }}
-                    />
-                    <div
-                      className="stack issues"
-                      style={{ width: `${ratio.ratios.issues}%` }}
-                    />
-                    <div
-                      className="stack reviews"
-                      style={{ width: `${ratio.ratios.pullRequestReviews}%` }}
-                    />
-                  </div>
-                  <div className="ratio-legend">
-                    <span>commits {formatPercent(ratio.ratios.commits)}</span>
-                    <span>PRs {formatPercent(ratio.ratios.pullRequests)}</span>
-                    <span>Issues {formatPercent(ratio.ratios.issues)}</span>
-                    <span>Reviews {formatPercent(ratio.ratios.pullRequestReviews)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {stats.contributionTypeRatios.some((ratio) => ratio.isPartial) && (
-              <div className="partial-note">
-                Some values may be partial due to GitHub API limitations.
-              </div>
-            )}
           </section>
 
           <div className="contribution-section">
