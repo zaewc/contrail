@@ -66,10 +66,6 @@ export const App: React.FC = () => {
     let previousAnalyzed = initialStats.codeVolume.summary.commitsAnalyzed;
 
     for (const commitLimit of INCREMENTAL_COMMIT_LIMITS) {
-      if (previousAnalyzed < commitLimit - INITIAL_COMMIT_LIMIT) {
-        break;
-      }
-
       try {
         const nextStats = await fetchStats(login, commitLimit);
         if (activeRequestRef.current !== requestId) {
