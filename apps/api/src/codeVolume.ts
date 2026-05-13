@@ -11,6 +11,7 @@ export const DEFAULT_COMMIT_LIMIT = 500;
 export const MAX_COMMIT_LIMIT = 1000;
 export const DEFAULT_REPOSITORY_LIMIT = 50;
 export const MAX_REPOSITORY_LIMIT = 100;
+const COMMIT_DETAIL_CONCURRENCY = 8;
 
 type CommitListItem = {
   sha: string;
@@ -32,6 +33,42 @@ type LanguageVolume = {
   deletions: number;
   changes: number;
 };
+
+function addCommitDetailToStats(
+  detail: CommitDetail,
+  stats: CodeVolumeStats,
+  languageMap: Map<string, LanguageVolume>
+): void {
+  stats.summary.commitsAnalyzed += 1;
+
+  for (const file of detail.files ?? []) {
+    if (shouldExcludeFromCodeVolume(file.filename)) {
+      continue;
+    }
+
+    const language = languageForFilename(file.filename);
+    const entry =
+      languageMap.get(language) ??
+      {
+        language,
+        filesChanged: 0,
+        additions: 0,
+        deletions: 0,
+        changes: 0,
+      };
+
+    entry.filesChanged += 1;
+    entry.additions += file.additions;
+    entry.deletions += file.deletions;
+    entry.changes += file.changes;
+    languageMap.set(language, entry);
+
+    stats.summary.filesChanged += 1;
+    stats.summary.additions += file.additions;
+    stats.summary.deletions += file.deletions;
+    stats.summary.changes += file.changes;
+  }
+}
 
 function emptyStats(options: CodeVolumeOptions): CodeVolumeStats {
   return {
@@ -107,52 +144,36 @@ export async function analyzeCodeVolume(
       const remaining = safeOptions.commitLimit - stats.summary.commitsAnalyzed;
       commits = commits.slice(0, remaining);
 
-      for (const commit of commits) {
-        try {
-          const detail = await githubRest<CommitDetail>(
-            `/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}/commits/${commit.sha}`
-          );
-          stats.summary.commitsAnalyzed += 1;
-          repoCommitCount += 1;
+      let detailFailureReason: string | null = null;
+      for (let i = 0; i < commits.length; i += COMMIT_DETAIL_CONCURRENCY) {
+        const batch = commits.slice(i, i + COMMIT_DETAIL_CONCURRENCY);
+        const results = await Promise.allSettled(
+          batch.map((commit) =>
+            githubRest<CommitDetail>(
+              `/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}/commits/${commit.sha}`
+            )
+          )
+        );
 
-          for (const file of detail.files ?? []) {
-            if (shouldExcludeFromCodeVolume(file.filename)) {
-              continue;
-            }
-
-            const language = languageForFilename(file.filename);
-            const entry =
-              languageMap.get(language) ??
-              {
-                language,
-                filesChanged: 0,
-                additions: 0,
-                deletions: 0,
-                changes: 0,
-              };
-
-            entry.filesChanged += 1;
-            entry.additions += file.additions;
-            entry.deletions += file.deletions;
-            entry.changes += file.changes;
-            languageMap.set(language, entry);
-
-            stats.summary.filesChanged += 1;
-            stats.summary.additions += file.additions;
-            stats.summary.deletions += file.deletions;
-            stats.summary.changes += file.changes;
-          }
-        } catch (error) {
-          stats.scope.isPartial = true;
-          stats.skippedRepositories.push({
-            nameWithOwner: repo.nameWithOwner,
-            reason:
-              classifyRestError(error) === 'rate_limited'
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            addCommitDetailToStats(result.value, stats, languageMap);
+            repoCommitCount += 1;
+          } else {
+            stats.scope.isPartial = true;
+            detailFailureReason =
+              classifyRestError(result.reason) === 'rate_limited'
                 ? 'rate_limited'
-                : 'commit_detail_failed',
-          });
-          break;
+                : 'commit_detail_failed';
+          }
         }
+      }
+
+      if (detailFailureReason) {
+        stats.skippedRepositories.push({
+          nameWithOwner: repo.nameWithOwner,
+          reason: detailFailureReason,
+        });
       }
 
       if (repoCommitCount > 0) {
