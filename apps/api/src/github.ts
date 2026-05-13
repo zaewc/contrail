@@ -19,6 +19,10 @@ import { analyzeContributionTypeRatios } from './contributionRatios.js';
 
 const loginSchema = z.string().min(1).max(39);
 
+interface GitHubStatsOptions {
+  commitLimit?: number | null;
+}
+
 function mergeCalendars(calendars: ContributionDay[][]): ContributionDay[] {
   const dateMap = new Map<string, ContributionDay>();
 
@@ -196,7 +200,10 @@ async function getUserDataForYear(
   };
 }
 
-export async function getGitHubStats(login: string): Promise<GitHubStats> {
+export async function getGitHubStats(
+  login: string,
+  options: GitHubStatsOptions = {}
+): Promise<GitHubStats> {
   // Validate login
   try {
     loginSchema.parse(login);
@@ -306,7 +313,7 @@ export async function getGitHubStats(login: string): Promise<GitHubStats> {
   const [codeVolume, techStack] = await Promise.all([
     analyzeCodeVolume(firstYear.login, repositories, {
       years: DEFAULT_CODE_VOLUME_YEARS,
-      commitLimit: DEFAULT_COMMIT_LIMIT,
+      commitLimit: options.commitLimit ?? DEFAULT_COMMIT_LIMIT,
       repositoryLimit: DEFAULT_REPOSITORY_LIMIT,
     }),
     analyzeTechStack(repositories),

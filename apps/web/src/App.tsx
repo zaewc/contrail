@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { fetchStats, getCardUrl, GitHubStats } from './api.js';
 import { StatsCard } from './components/StatsCard.js';
 import { ContributionGrid } from './components/ContributionGrid.js';
@@ -6,6 +6,8 @@ import { TechTreemap } from './components/TechTreemap.js';
 import './styles.css';
 
 type AppState = 'empty' | 'loading' | 'success' | 'error';
+const INITIAL_COMMIT_LIMIT = 100;
+const INCREMENTAL_COMMIT_LIMITS = [200, 300, 400, 500];
 
 export const App: React.FC = () => {
   const [input, setInput] = useState('');
@@ -13,26 +15,72 @@ export const App: React.FC = () => {
   const [stats, setStats] = useState<GitHubStats | null>(null);
   const [error, setError] = useState<string>('');
   const [copied, setCopied] = useState(false);
+  const activeRequestRef = useRef(0);
 
   const handleSearch = async () => {
-    if (!input.trim()) {
+    const login = input.trim();
+    if (!login) {
       setError('Please enter a GitHub username');
       setState('error');
       return;
     }
 
+    const requestId = activeRequestRef.current + 1;
+    activeRequestRef.current = requestId;
     setState('loading');
     setError('');
     setStats(null);
 
     try {
-      const result = await fetchStats(input.trim());
+      const result = await fetchStats(login, INITIAL_COMMIT_LIMIT);
+      if (activeRequestRef.current !== requestId) {
+        return;
+      }
       setStats(result);
       setState('success');
+      void refreshStatsIncrementally(login, requestId, result);
     } catch (err) {
+      if (activeRequestRef.current !== requestId) {
+        return;
+      }
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setError(errorMessage);
       setState('error');
+    }
+  };
+
+  const refreshStatsIncrementally = async (
+    login: string,
+    requestId: number,
+    initialStats: GitHubStats
+  ) => {
+    let previousAnalyzed = initialStats.codeVolume.summary.commitsAnalyzed;
+
+    for (const commitLimit of INCREMENTAL_COMMIT_LIMITS) {
+      if (previousAnalyzed < commitLimit - INITIAL_COMMIT_LIMIT) {
+        break;
+      }
+
+      try {
+        const nextStats = await fetchStats(login, commitLimit);
+        if (activeRequestRef.current !== requestId) {
+          return;
+        }
+
+        const nextAnalyzed = nextStats.codeVolume.summary.commitsAnalyzed;
+        setStats(nextStats);
+
+        if (
+          !nextStats.codeVolume.scope.isPartial ||
+          nextAnalyzed <= previousAnalyzed ||
+          nextAnalyzed < commitLimit
+        ) {
+          break;
+        }
+        previousAnalyzed = nextAnalyzed;
+      } catch {
+        return;
+      }
     }
   };
 

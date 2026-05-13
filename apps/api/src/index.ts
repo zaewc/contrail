@@ -8,8 +8,10 @@ import type { GitHubStats } from './types.js';
 
 const PORT = parseInt(process.env.PORT || '4000', 10);
 const CACHE_TTL = parseInt(process.env.CACHE_TTL_SECONDS || '21600', 10);
-const statsCacheKey = (login: string) =>
-  `github:stats:${login.toLowerCase()}:v4`;
+const DEFAULT_INCREMENTAL_COMMIT_LIMIT = 100;
+const MAX_INCREMENTAL_COMMIT_LIMIT = 1000;
+const statsCacheKey = (login: string, commitLimit: number | null = DEFAULT_INCREMENTAL_COMMIT_LIMIT) =>
+  `github:stats:${login.toLowerCase()}:v5:commitLimit:${commitLimit ?? 'all'}`;
 const svgCacheKey = (login: string) => `svg:${login.toLowerCase()}:v2`;
 const pendingStatsRequests = new Map<string, Promise<GitHubStats>>();
 
@@ -27,24 +29,39 @@ fastify.get('/health', async () => {
   return { status: 'ok' };
 });
 
+function parseCommitLimit(value: unknown): number | null {
+  if (value === 'all') {
+    return null;
+  }
+  if (typeof value !== 'string') {
+    return DEFAULT_INCREMENTAL_COMMIT_LIMIT;
+  }
+  const limit = Number(value);
+  if (!Number.isInteger(limit) || limit < 1) {
+    return DEFAULT_INCREMENTAL_COMMIT_LIMIT;
+  }
+  return Math.min(limit, MAX_INCREMENTAL_COMMIT_LIMIT);
+}
+
 // Stats endpoint
-fastify.get<{ Params: { login: string } }>(
+fastify.get<{ Params: { login: string }; Querystring: { commitLimit?: string } }>(
   '/api/users/:login/stats',
   async (request, reply) => {
     const { login } = request.params;
+    const commitLimit = parseCommitLimit(request.query.commitLimit);
+    const key = statsCacheKey(login, commitLimit);
 
     // Check cache
-    const cached = getCached(statsCacheKey(login));
+    const cached = getCached(key);
     if (cached) {
       return cached;
     }
 
     try {
-      const key = statsCacheKey(login);
       const pending = pendingStatsRequests.get(key);
       const stats =
         pending ??
-        getGitHubStats(login).finally(() => {
+        getGitHubStats(login, { commitLimit }).finally(() => {
           pendingStatsRequests.delete(key);
         });
 
@@ -101,7 +118,9 @@ fastify.get<{ Params: { login: string } }>(
 
     try {
       const cachedStats = getCached<GitHubStats>(statsCacheKey(login));
-      const stats = cachedStats ?? (await getGitHubStats(login));
+      const stats = cachedStats ?? (await getGitHubStats(login, {
+        commitLimit: DEFAULT_INCREMENTAL_COMMIT_LIMIT,
+      }));
       if (!cachedStats) {
         setCached(statsCacheKey(login), stats, CACHE_TTL);
       }

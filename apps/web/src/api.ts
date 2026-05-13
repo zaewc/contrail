@@ -112,8 +112,18 @@ export interface GitHubStats {
 
 const API_BASE = '/api';
 
-export async function fetchStats(login: string): Promise<GitHubStats> {
-  const response = await fetch(`${API_BASE}/users/${login}/stats`);
+export async function fetchStats(
+  login: string,
+  commitLimit?: number
+): Promise<GitHubStats> {
+  const params = new URLSearchParams();
+  if (commitLimit !== undefined) {
+    params.set('commitLimit', String(commitLimit));
+  }
+  const query = params.toString();
+  const response = await fetch(
+    `${API_BASE}/users/${login}/stats${query ? `?${query}` : ''}`
+  );
 
   if (!response.ok) {
     if (response.status === 404) {
