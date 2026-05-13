@@ -1,20 +1,17 @@
 import { classifyRestError, githubRest } from './githubClient.js';
-import { languageForFilename, shouldExcludeFromCodeVolume } from './language.js';
+import { languageForFilename } from './language.js';
 import {
   CodeVolumeOptions,
   CodeVolumeStats,
   ContributedRepository,
 } from './types.js';
 
-export const DEFAULT_CODE_VOLUME_YEARS = 1;
-export const DEFAULT_COMMIT_LIMIT = 500;
+export const DEFAULT_CODE_VOLUME_YEARS = 5;
+export const DEFAULT_COMMIT_LIMIT = null;
 export const MAX_COMMIT_LIMIT = 1000;
-export const DEFAULT_REPOSITORY_LIMIT = 50;
+export const DEFAULT_REPOSITORY_LIMIT = 100;
 export const MAX_REPOSITORY_LIMIT = 100;
 const COMMIT_DETAIL_CONCURRENCY = 8;
-const CODE_VOLUME_TIME_BUDGET_MS = Number(
-  process.env.CODE_VOLUME_TIME_BUDGET_MS ?? 25000
-);
 
 type CommitListItem = {
   sha: string;
@@ -45,10 +42,6 @@ function addCommitDetailToStats(
   stats.summary.commitsAnalyzed += 1;
 
   for (const file of detail.files ?? []) {
-    if (shouldExcludeFromCodeVolume(file.filename)) {
-      continue;
-    }
-
     const language = languageForFilename(file.filename);
     const entry =
       languageMap.get(language) ??
@@ -102,15 +95,16 @@ export async function analyzeCodeVolume(
 ): Promise<CodeVolumeStats> {
   const safeOptions = {
     years: Math.max(1, options.years),
-    commitLimit: Math.min(options.commitLimit, MAX_COMMIT_LIMIT),
+    commitLimit:
+      options.commitLimit === null
+        ? null
+        : Math.min(options.commitLimit, MAX_COMMIT_LIMIT),
     repositoryLimit: Math.min(options.repositoryLimit, MAX_REPOSITORY_LIMIT),
   };
   const stats = emptyStats(safeOptions);
   const languageMap = new Map<string, LanguageVolume>();
   const since = new Date();
   since.setFullYear(since.getFullYear() - safeOptions.years);
-  const deadline = Date.now() + CODE_VOLUME_TIME_BUDGET_MS;
-  const isOutOfTime = () => Date.now() > deadline;
 
   const targetRepositories = repositories.slice(0, safeOptions.repositoryLimit);
   if (repositories.length > targetRepositories.length) {
@@ -118,7 +112,10 @@ export async function analyzeCodeVolume(
   }
 
   for (const repo of targetRepositories) {
-    if (stats.summary.commitsAnalyzed >= safeOptions.commitLimit || isOutOfTime()) {
+    if (
+      safeOptions.commitLimit !== null &&
+      stats.summary.commitsAnalyzed >= safeOptions.commitLimit
+    ) {
       stats.scope.isPartial = true;
       break;
     }
@@ -128,7 +125,10 @@ export async function analyzeCodeVolume(
       let page = 1;
       let commits: CommitListItem[] = [];
 
-      while (stats.summary.commitsAnalyzed + commits.length < safeOptions.commitLimit) {
+      while (
+        safeOptions.commitLimit === null ||
+        stats.summary.commitsAnalyzed + commits.length < safeOptions.commitLimit
+      ) {
         const pageCommits = await githubRest<CommitListItem[]>(
           `/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}/commits`,
           {
@@ -146,16 +146,13 @@ export async function analyzeCodeVolume(
         page += 1;
       }
 
-      const remaining = safeOptions.commitLimit - stats.summary.commitsAnalyzed;
-      commits = commits.slice(0, remaining);
+      if (safeOptions.commitLimit !== null) {
+        const remaining = safeOptions.commitLimit - stats.summary.commitsAnalyzed;
+        commits = commits.slice(0, remaining);
+      }
 
       let detailFailureReason: string | null = null;
       for (let i = 0; i < commits.length; i += COMMIT_DETAIL_CONCURRENCY) {
-        if (isOutOfTime()) {
-          stats.scope.isPartial = true;
-          break;
-        }
-
         const batch = commits.slice(i, i + COMMIT_DETAIL_CONCURRENCY);
         const results = await Promise.allSettled(
           batch.map((commit) =>

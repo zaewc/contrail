@@ -30,7 +30,7 @@ export interface StreakStats {
 export interface CodeVolumeStats {
   scope: {
     years: number;
-    commitLimit: number;
+    commitLimit: number | null;
     repositoryLimit: number;
     isPartial: boolean;
   };
