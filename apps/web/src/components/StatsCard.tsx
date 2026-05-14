@@ -1,4 +1,5 @@
 import React from 'react';
+import { Badge, Card, Text } from '@zaemoru/react';
 import {
   PolarAngleAxis,
   PolarGrid,
@@ -27,16 +28,20 @@ export const StatsCard: React.FC<StatsCardProps> = ({ stats }) => {
   return (
     <section className="stats-card">
       <div className="stats-summary">
-        <div>
+        <Card className="summary-card" elevation="low" padding="large">
           <div className="stat-value">{formatNumber(stats.totals.contributions)}</div>
-          <div className="stat-label">Contributions</div>
-        </div>
-        <div>
+          <Text className="stat-label" size="sm" tone="muted" weight="semibold">
+            Contributions
+          </Text>
+        </Card>
+        <Card className="summary-card" elevation="low" padding="large">
           <div className="stat-value">{formatNumber(stats.totals.repositories)}</div>
-          <div className="stat-label">Repositories</div>
-        </div>
+          <Text className="stat-label" size="sm" tone="muted" weight="semibold">
+            Repositories
+          </Text>
+        </Card>
       </div>
-      <div className="radial-panel">
+      <Card className="radial-panel" elevation="low" padding="large">
         <div className="radial-chart" role="img" aria-label="Commits, PR, Issue, Review radial graph">
           <ResponsiveContainer width="100%" height="100%">
             <RadarChart data={radialItems} outerRadius="68%">
@@ -74,12 +79,14 @@ export const StatsCard: React.FC<StatsCardProps> = ({ stats }) => {
         <div className="radial-legend">
           {radialItems.map((item) => (
             <div className="radial-legend-item" key={item.label}>
-              <span>{item.label}</span>
+              <Badge variant="weak" size="small" color="green">
+                {item.label}
+              </Badge>
               <strong>{formatNumber(item.value)}</strong>
             </div>
           ))}
         </div>
-      </div>
+      </Card>
     </section>
   );
 };

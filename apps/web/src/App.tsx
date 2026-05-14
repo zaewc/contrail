@@ -1,4 +1,15 @@
 import React, { useRef, useState } from 'react';
+import {
+  Badge,
+  Button,
+  Card,
+  Heading,
+  Result,
+  Section,
+  Spinner,
+  Text,
+  TextField,
+} from '@zaemoru/react';
 import { fetchStats, getCardUrl, GitHubStats } from './api.js';
 import { StatsCard } from './components/StatsCard.js';
 import { ContributionGrid } from './components/ContributionGrid.js';
@@ -26,7 +37,8 @@ export const App: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const activeRequestRef = useRef(0);
 
-  const handleSearch = async () => {
+  const handleSearch = async (event?: React.SyntheticEvent) => {
+    event?.preventDefault();
     const login = input.trim();
     if (!login) {
       setError('Please enter a GitHub username');
@@ -85,9 +97,9 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      handleSearch();
+      void handleSearch(e);
     }
   };
 
@@ -121,118 +133,140 @@ export const App: React.FC = () => {
   return (
     <div className="container">
       <div className="header">
-        <h1 className="header-title">contrail</h1>
+        <Heading className="header-title" level="1" size="3xl">
+          contrail
+        </Heading>
+        <Text tone="muted" size="md">
+          GitHub contribution intelligence
+        </Text>
       </div>
 
-      <div className="search-section">
-        <input
-          type="text"
-          className="search-input"
-          placeholder="Enter GitHub username..."
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyPress={handleKeyPress}
-          disabled={state === 'loading'}
-        />
-        <button
-          className="search-button"
-          onClick={handleSearch}
-          disabled={state === 'loading'}
+      <Card className="search-card" elevation="low" padding="large">
+        <form
+          className="search-section"
+          onSubmit={handleSearch}
+          onKeyDown={handleSearchKeyDown}
         >
-          {state === 'loading' ? 'Analyzing...' : 'Analyze'}
-        </button>
-      </div>
+          <TextField
+            className="search-input"
+            label="GitHub username"
+            placeholder="Enter GitHub username..."
+            value={input}
+            onInput={(value) => setInput(value)}
+            disabled={state === 'loading'}
+          />
+          <Button
+            className="search-button"
+            type="button"
+            size="large"
+            loading={state === 'loading'}
+            disabled={state === 'loading'}
+            onClick={handleSearch}
+          >
+            Analyze
+          </Button>
+        </form>
+      </Card>
 
-      {state === 'loading' && <div className="loading">Loading your stats</div>}
+      {state === 'loading' && (
+        <Card className="state-card" elevation="low" padding="large">
+          <Spinner size="medium" tone="primary" label="Loading your stats" />
+        </Card>
+      )}
 
       {state === 'error' && (
-        <div className="error">
-          <strong>Error:</strong> {error}
-        </div>
+        <Result
+          className="state-card"
+          tone="danger"
+          title="Error"
+          description={error}
+        />
       )}
 
       {state === 'success' && stats && (
         <div className="results">
-          <div className="profile">
+          <Card className="profile" elevation="low" padding="large">
             <div className="profile-avatar">
               {stats.name ? stats.name[0]?.toUpperCase() : '?'}
             </div>
             <div className="profile-info">
-              <h2>{stats.name || stats.login}</h2>
-              <div className="login">@{stats.login}</div>
-              <div className="range">
+              <Heading level="2" size="lg">{stats.name || stats.login}</Heading>
+              <Badge variant="weak" size="small" color="blue">
+                @{stats.login}
+              </Badge>
+              <Text className="range" tone="muted" size="sm">
                 {formatDate(stats.range.from)} • {formatDate(stats.range.to)}
-              </div>
+              </Text>
             </div>
-          </div>
+          </Card>
 
           <StatsCard stats={stats} />
 
           <div className="analysis-grid">
-            <section className="analysis-card">
-              <h3>Streak</h3>
+            <Card className="analysis-card" elevation="low" padding="large">
+              <Heading level="3" size="sm">Streak</Heading>
               <div className="metric-row">
-                <span>Current streak</span>
+                <Text tone="muted" size="sm">Current streak</Text>
                 <strong>{formatNumber(stats.streaks.current)} days</strong>
               </div>
               <div className="metric-row">
-                <span>Max streak</span>
+                <Text tone="muted" size="sm">Max streak</Text>
                 <strong>{formatNumber(stats.streaks.max)} days</strong>
               </div>
-              <div className="metric-note">
+              <Text className="metric-note" tone="muted" size="sm">
                 {stats.streaks.maxStartDate && stats.streaks.maxEndDate
                   ? `${stats.streaks.maxStartDate} → ${stats.streaks.maxEndDate}`
                   : 'No active streak in this range'}
-              </div>
-            </section>
+              </Text>
+            </Card>
 
-            <section className="analysis-card">
-              <h3>작성 커밋 기준 코드 변경량</h3>
-              <div className="scope-note">
+            <Card className="analysis-card" elevation="low" padding="large">
+              <Heading level="3" size="sm">작성 커밋 기준 코드 변경량</Heading>
+              <Text className="scope-note" tone="muted" size="sm">
                 최근 {stats.codeVolume.scope.years}년,{' '}
                 {stats.codeVolume.scope.commitLimit === null
                   ? '커밋 제한 없음'
                   : `최대 ${formatNumber(stats.codeVolume.scope.commitLimit)}커밋`}
                 {isCodeVolumeLoading && <span className="inline-spinner" />}
-              </div>
+              </Text>
               <div className={codeMetricClassName}>
                 <div>
-                  <span>Lines added</span>
+                  <Text tone="muted" size="sm">Lines added</Text>
                   <strong>
                     {formatNumber(stats.codeVolume.summary.additions)}
                     {isCodeVolumeLoading && <span className="loading-dots">...</span>}
                   </strong>
                 </div>
                 <div>
-                  <span>Lines deleted</span>
+                  <Text tone="muted" size="sm">Lines deleted</Text>
                   <strong>
                     {formatNumber(stats.codeVolume.summary.deletions)}
                     {isCodeVolumeLoading && <span className="loading-dots">...</span>}
                   </strong>
                 </div>
                 <div>
-                  <span>Total changes</span>
+                  <Text tone="muted" size="sm">Total changes</Text>
                   <strong>
                     {formatNumber(stats.codeVolume.summary.changes)}
                     {isCodeVolumeLoading && <span className="loading-dots">...</span>}
                   </strong>
                 </div>
                 <div>
-                  <span>Files changed</span>
+                  <Text tone="muted" size="sm">Files changed</Text>
                   <strong>
                     {formatNumber(stats.codeVolume.summary.filesChanged)}
                     {isCodeVolumeLoading && <span className="loading-dots">...</span>}
                   </strong>
                 </div>
                 <div>
-                  <span>Commits analyzed</span>
+                  <Text tone="muted" size="sm">Commits analyzed</Text>
                   <strong>
                     {formatNumber(stats.codeVolume.summary.commitsAnalyzed)}
                     {isCodeVolumeLoading && <span className="loading-dots">...</span>}
                   </strong>
                 </div>
                 <div>
-                  <span>Repositories analyzed</span>
+                  <Text tone="muted" size="sm">Repositories analyzed</Text>
                   <strong>
                     {formatNumber(stats.codeVolume.summary.repositoriesAnalyzed)}
                     {isCodeVolumeLoading && <span className="loading-dots">...</span>}
@@ -240,48 +274,49 @@ export const App: React.FC = () => {
                 </div>
               </div>
               {stats.codeVolume.scope.isPartial && (
-                <div className="partial-note">
+                <Text className="partial-note" tone="muted" size="sm">
                   Some repositories may be partial due to GitHub API limits.
-                </div>
+                </Text>
               )}
-            </section>
+            </Card>
           </div>
 
-          <section className="analysis-card full-width">
-            <h3>기술스택</h3>
-            <TechTreemap items={stats.techStack} />
-          </section>
+          <Section className="section-block" title="기술스택" gap="medium">
+            <Card className="analysis-card full-width" elevation="low" padding="large">
+              <TechTreemap items={stats.techStack} />
+            </Card>
+          </Section>
 
-          <div className="contribution-section">
-            <h3>잔디</h3>
-            <ContributionGrid days={stats.calendar} />
-          </div>
+          <Section className="section-block" title="잔디" gap="medium">
+            <Card className="contribution-section" elevation="low" padding="large">
+              <ContributionGrid days={stats.calendar} />
+            </Card>
+          </Section>
 
-          <div className="embed-section">
-            <h3>리드미에 넣기</h3>
+          <Card className="embed-section" elevation="low" padding="large">
+            <Heading level="3" size="sm">리드미에 넣기</Heading>
             <div className="embed-code">
               <code>![contrail]({getCardUrl(stats.login)})</code>
-              <button
+              <Button
                 className="copy-button"
+                variant="secondary"
+                size="small"
                 onClick={copyToClipboard}
               >
-                {copied ? '✓ Copied' : 'Copy'}
-              </button>
+                {copied ? 'Copied' : 'Copy'}
+              </Button>
             </div>
-          </div>
+          </Card>
         </div>
       )}
 
       {state === 'empty' && (
-        <div className="empty-state">
-          <div className="empty-state-icon">📊</div>
-          <div className="empty-state-text">
-            Enter a GitHub username to get started
-          </div>
-          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-            No data is stored on our servers. All analysis happens instantly.
-          </div>
-        </div>
+        <Result
+          className="empty-state"
+          tone="neutral"
+          title="Enter a GitHub username to get started"
+          description="No data is stored on our servers. All analysis happens instantly."
+        />
       )}
     </div>
   );
