@@ -141,32 +141,35 @@ export const App: React.FC = () => {
         </Text>
       </div>
 
-      <Card className="search-card" elevation="low" padding="large">
-        <form
-          className="search-section"
-          onSubmit={handleSearch}
-          onKeyDown={handleSearchKeyDown}
-        >
-          <TextField
-            className="search-input"
-            label="GitHub username"
-            placeholder="Enter GitHub username..."
-            value={input}
-            onInput={(value) => setInput(value)}
-            disabled={state === 'loading'}
-          />
-          <Button
-            className="search-button"
-            type="button"
-            size="large"
-            loading={state === 'loading'}
-            disabled={state === 'loading'}
-            onClick={handleSearch}
+      <div className="search-shell">
+        <Card className="search-card" elevation="low" padding="none">
+          <form
+            className="search-section"
+            onSubmit={handleSearch}
+            onKeyDown={handleSearchKeyDown}
           >
-            Analyze
-          </Button>
-        </form>
-      </Card>
+            <TextField
+              className="search-input"
+              label="GitHub username"
+              placeholder="Enter GitHub username..."
+              value={input}
+              onInput={(value) => setInput(value)}
+              disabled={state === 'loading'}
+            />
+            <Button
+              className="search-button"
+              type="button"
+              size="medium"
+              fullWidth
+              loading={state === 'loading'}
+              disabled={state === 'loading'}
+              onClick={handleSearch}
+            >
+              Analyze
+            </Button>
+          </form>
+        </Card>
+      </div>
 
       {state === 'loading' && (
         <Card className="state-card" elevation="low" padding="large">
@@ -311,17 +314,21 @@ export const App: React.FC = () => {
       )}
 
       {state === 'empty' && (
-        <Card className="empty-state" elevation="low" padding="large">
-          <Badge variant="weak" size="small" color="green">
-            Ready
-          </Badge>
-          <Heading level="2" size="md">
-            Enter a GitHub username to get started
-          </Heading>
-          <Text tone="muted" size="sm">
-            No data is stored on our servers. All analysis happens instantly.
-          </Text>
-        </Card>
+        <div className="empty-shell">
+          <Card className="empty-state" elevation="low" padding="none">
+            <div className="empty-state-content">
+              <Badge variant="weak" size="small" color="green">
+                Ready
+              </Badge>
+              <Heading level="2" size="md">
+                Enter a GitHub username to get started
+              </Heading>
+              <Text tone="muted" size="sm">
+                No data is stored on our servers. All analysis happens instantly.
+              </Text>
+            </div>
+          </Card>
+        </div>
       )}
     </div>
   );
