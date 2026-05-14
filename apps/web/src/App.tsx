@@ -311,12 +311,17 @@ export const App: React.FC = () => {
       )}
 
       {state === 'empty' && (
-        <Result
-          className="empty-state"
-          tone="neutral"
-          title="Enter a GitHub username to get started"
-          description="No data is stored on our servers. All analysis happens instantly."
-        />
+        <Card className="empty-state" elevation="low" padding="large">
+          <Badge variant="weak" size="small" color="green">
+            Ready
+          </Badge>
+          <Heading level="2" size="md">
+            Enter a GitHub username to get started
+          </Heading>
+          <Text tone="muted" size="sm">
+            No data is stored on our servers. All analysis happens instantly.
+          </Text>
+        </Card>
       )}
     </div>
   );
