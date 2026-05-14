@@ -2,21 +2,13 @@ import { githubRest } from './githubClient.js';
 import { ContributedRepository, TechStackItem } from './types.js';
 
 const LANGUAGE_CONCURRENCY = 8;
-const DEFAULT_LANGUAGE_REPOSITORY_LIMIT = 20;
-
-function getLanguageRepositoryLimit(): number {
-  const value = Number(process.env.TECH_STACK_REPOSITORY_LIMIT);
-  return Number.isInteger(value) && value > 0
-    ? value
-    : DEFAULT_LANGUAGE_REPOSITORY_LIMIT;
-}
 
 export async function analyzeTechStack(
   repositories: ContributedRepository[]
 ): Promise<TechStackItem[]> {
   const languageBytes = new Map<string, number>();
   const languageRepositoryCount = new Map<string, number>();
-  const targetRepositories = repositories.slice(0, getLanguageRepositoryLimit());
+  const targetRepositories = repositories;
 
   for (let i = 0; i < targetRepositories.length; i += LANGUAGE_CONCURRENCY) {
     const batch = targetRepositories.slice(i, i + LANGUAGE_CONCURRENCY);

@@ -22,7 +22,7 @@ const colors = [
 ];
 
 export const TechTreemap: React.FC<TechTreemapProps> = ({ items }) => {
-  const visibleItems = items.slice(0, 8).map((item, index) => ({
+  const visibleItems = items.map((item, index) => ({
     ...item,
     fill: colors[index % colors.length],
     value: item.bytes,
