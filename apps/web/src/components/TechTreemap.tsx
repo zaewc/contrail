@@ -86,7 +86,6 @@ export const TechTreemap: React.FC<TechTreemapProps> = ({ items }) => {
             contentStyle={{
               backgroundColor: 'var(--bg-tertiary)',
               border: '1px solid var(--border)',
-              borderRadius: 6,
               color: 'var(--text-primary)',
             }}
           />
