@@ -239,45 +239,59 @@ export async function getGitHubStats(
 
   ranges.reverse();
 
-  // Fetch data for each year
-  const yearResults = await Promise.allSettled(
-    ranges.map((range) =>
-      getUserDataForYear(
-        login,
-        range.from.toISOString(),
-        range.to.toISOString()
-      )
-    )
-  );
   const allYearData: GitHubUserData[] = [];
   const allCalendars: ContributionDay[][] = [];
 
-  for (const result of yearResults) {
-    if (result.status === 'fulfilled') {
-      const yearData = result.value;
-      allYearData.push(yearData);
+  const cachedUserData = getCached<GitHubUserData[]>(userDataCacheKey(login));
+  if (cachedUserData) {
+    allYearData.push(...cachedUserData);
+    for (const yearData of cachedUserData) {
       allCalendars.push(
         yearData.contributionsCollection.contributionCalendar.weeks.flatMap(
           (w) => w.contributionDays
         )
       );
-      continue;
     }
+  } else {
+    const yearResults = await Promise.allSettled(
+      ranges.map((range) =>
+        getUserDataForYear(
+          login,
+          range.from.toISOString(),
+          range.to.toISOString()
+        )
+      )
+    );
 
-    const error = result.reason;
-    if (error instanceof Error) {
-      if (error.message === 'USER_NOT_FOUND') {
-        throw error;
+    for (const result of yearResults) {
+      if (result.status === 'fulfilled') {
+        const yearData = result.value;
+        allYearData.push(yearData);
+        allCalendars.push(
+          yearData.contributionsCollection.contributionCalendar.weeks.flatMap(
+            (w) => w.contributionDays
+          )
+        );
+        continue;
       }
-      // Skip year on partial failure
-      console.error(`Failed to fetch data for year: ${error.message}`);
-    } else {
-      console.error('Failed to fetch data for year');
-    }
-  }
 
-  if (allYearData.length === 0) {
-    throw new Error('USER_NOT_FOUND');
+      const error = result.reason;
+      if (error instanceof Error) {
+        if (error.message === 'USER_NOT_FOUND') {
+          throw error;
+        }
+        // Skip year on partial failure
+        console.error(`Failed to fetch data for year: ${error.message}`);
+      } else {
+        console.error('Failed to fetch data for year');
+      }
+    }
+
+    if (allYearData.length === 0) {
+      throw new Error('USER_NOT_FOUND');
+    }
+
+    setCached(userDataCacheKey(login), allYearData, COMPONENT_CACHE_TTL);
   }
 
   // Use first year data for user info
@@ -323,6 +337,19 @@ export async function getGitHubStats(
   const repositories = normalizeRepositories(firstYear.login, repositoryNodes);
   const streaks = calculateStreaks(mergedCalendar);
   const commitLimit = options.commitLimit ?? DEFAULT_COMMIT_LIMIT;
+  const cachedTechStack = getCached<TechStackItem[]>(
+    techStackCacheKey(firstYear.login)
+  );
+  const techStackPromise: Promise<TechStackItem[]> = cachedTechStack
+    ? Promise.resolve(cachedTechStack)
+    : analyzeTechStack(repositories).then((result) => {
+        setCached(
+          techStackCacheKey(firstYear.login),
+          result,
+          COMPONENT_CACHE_TTL
+        );
+        return result;
+      });
   const [codeVolume, techStack] = await Promise.all([
     analyzeCodeVolume(firstYear.login, repositories, {
       years: DEFAULT_CODE_VOLUME_YEARS,
@@ -332,7 +359,7 @@ export async function getGitHubStats(
           ? 100
           : DEFAULT_REPOSITORY_LIMIT,
     }, firstYear.id),
-    analyzeTechStack(repositories),
+    techStackPromise,
   ]);
   const contributionTypeRatios =
     process.env.ANALYZE_CONTRIBUTION_RATIOS === 'true'
