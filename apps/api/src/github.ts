@@ -5,6 +5,7 @@ import {
   GitHubStats,
   GitHubUserData,
   ContributionDay,
+  TechStackItem,
 } from './types.js';
 import { queryGitHubGraphQL } from './githubClient.js';
 import { calculateStreaks } from './streaks.js';
@@ -16,8 +17,17 @@ import {
 } from './codeVolume.js';
 import { analyzeTechStack } from './techStack.js';
 import { analyzeContributionTypeRatios } from './contributionRatios.js';
+import { getCached, setCached } from './cache.js';
 
 const loginSchema = z.string().min(1).max(39);
+const COMPONENT_CACHE_TTL = parseInt(
+  process.env.CACHE_TTL_SECONDS || '21600',
+  10
+);
+const userDataCacheKey = (login: string) =>
+  `github:user-data:${login.toLowerCase()}:v1`;
+const techStackCacheKey = (login: string) =>
+  `github:techstack:${login.toLowerCase()}:v1`;
 
 interface GitHubStatsOptions {
   commitLimit?: number | null;
