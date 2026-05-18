@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Badge,
   Button,
@@ -14,6 +14,7 @@ import { fetchStats, getCardUrl, GitHubStats } from './api.js';
 import { StatsCard } from './components/StatsCard.js';
 import { ContributionGrid } from './components/ContributionGrid.js';
 import { TechTreemap } from './components/TechTreemap.js';
+import { formatDate, formatNumber } from './utils/format.js';
 import './styles.css';
 
 type AppState = 'empty' | 'loading' | 'success' | 'error';
@@ -36,9 +37,18 @@ export const App: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const activeRequestRef = useRef(0);
+  const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleSearch = async (event?: React.SyntheticEvent) => {
-    event?.preventDefault();
+  useEffect(
+    () => () => {
+      if (copiedTimeoutRef.current !== null) {
+        clearTimeout(copiedTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
+  const handleSearch = async () => {
     const login = input.trim();
     if (!login) {
       setError('Please enter a GitHub username');
@@ -59,7 +69,9 @@ export const App: React.FC = () => {
       }
       setStats(result);
       setState('success');
-      void refreshStatsIncrementally(login, requestId, result);
+      if (result.codeVolume.scope.isPartial) {
+        void refreshStatsIncrementally(login, requestId, result);
+      }
     } catch (err) {
       if (activeRequestRef.current !== requestId) {
         return;
@@ -85,10 +97,12 @@ export const App: React.FC = () => {
         }
 
         const nextAnalyzed = nextStats.codeVolume.summary.commitsAnalyzed;
+        if (nextAnalyzed <= previousAnalyzed) {
+          return;
+        }
         setStats(nextStats);
-
-        if (!nextStats.codeVolume.scope.isPartial || nextAnalyzed <= previousAnalyzed) {
-          break;
+        if (!nextStats.codeVolume.scope.isPartial) {
+          return;
         }
         previousAnalyzed = nextAnalyzed;
       } catch {
@@ -99,7 +113,7 @@ export const App: React.FC = () => {
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      void handleSearch(e);
+      void handleSearch();
     }
   };
 
@@ -108,18 +122,11 @@ export const App: React.FC = () => {
     const embedCode = `![contrail](${getCardUrl(stats.login)})`;
     navigator.clipboard.writeText(embedCode);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (copiedTimeoutRef.current !== null) {
+      clearTimeout(copiedTimeoutRef.current);
+    }
+    copiedTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
   };
-
-  const formatDate = (dateStr: string): string => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
-  const formatNumber = (n: number): string => n.toLocaleString('en-US');
   const isCodeVolumeLoading = Boolean(
     stats &&
       stats.codeVolume.scope.isPartial &&
@@ -129,6 +136,19 @@ export const App: React.FC = () => {
   const codeMetricClassName = isCodeVolumeLoading
     ? 'metric-grid metric-grid-loading'
     : 'metric-grid';
+  const codeMetrics = stats
+    ? [
+        { label: 'Lines added', value: stats.codeVolume.summary.additions },
+        { label: 'Lines deleted', value: stats.codeVolume.summary.deletions },
+        { label: 'Total changes', value: stats.codeVolume.summary.changes },
+        { label: 'Files changed', value: stats.codeVolume.summary.filesChanged },
+        { label: 'Commits analyzed', value: stats.codeVolume.summary.commitsAnalyzed },
+        {
+          label: 'Repositories analyzed',
+          value: stats.codeVolume.summary.repositoriesAnalyzed,
+        },
+      ]
+    : [];
 
   return (
     <div className="container">
@@ -143,9 +163,8 @@ export const App: React.FC = () => {
 
       <div className="search-shell">
         <Card className="search-card" elevation="low" padding="none">
-          <form
+          <div
             className="search-section"
-            onSubmit={handleSearch}
             onKeyDown={handleSearchKeyDown}
           >
             <TextField
@@ -167,7 +186,7 @@ export const App: React.FC = () => {
             >
               Analyze
             </Button>
-          </form>
+          </div>
         </Card>
       </div>
 
@@ -233,48 +252,15 @@ export const App: React.FC = () => {
                 {isCodeVolumeLoading && <span className="inline-spinner" />}
               </Text>
               <div className={codeMetricClassName}>
-                <div>
-                  <Text tone="muted" size="sm">Lines added</Text>
-                  <strong>
-                    {formatNumber(stats.codeVolume.summary.additions)}
-                    {isCodeVolumeLoading && <span className="loading-dots">...</span>}
-                  </strong>
-                </div>
-                <div>
-                  <Text tone="muted" size="sm">Lines deleted</Text>
-                  <strong>
-                    {formatNumber(stats.codeVolume.summary.deletions)}
-                    {isCodeVolumeLoading && <span className="loading-dots">...</span>}
-                  </strong>
-                </div>
-                <div>
-                  <Text tone="muted" size="sm">Total changes</Text>
-                  <strong>
-                    {formatNumber(stats.codeVolume.summary.changes)}
-                    {isCodeVolumeLoading && <span className="loading-dots">...</span>}
-                  </strong>
-                </div>
-                <div>
-                  <Text tone="muted" size="sm">Files changed</Text>
-                  <strong>
-                    {formatNumber(stats.codeVolume.summary.filesChanged)}
-                    {isCodeVolumeLoading && <span className="loading-dots">...</span>}
-                  </strong>
-                </div>
-                <div>
-                  <Text tone="muted" size="sm">Commits analyzed</Text>
-                  <strong>
-                    {formatNumber(stats.codeVolume.summary.commitsAnalyzed)}
-                    {isCodeVolumeLoading && <span className="loading-dots">...</span>}
-                  </strong>
-                </div>
-                <div>
-                  <Text tone="muted" size="sm">Repositories analyzed</Text>
-                  <strong>
-                    {formatNumber(stats.codeVolume.summary.repositoriesAnalyzed)}
-                    {isCodeVolumeLoading && <span className="loading-dots">...</span>}
-                  </strong>
-                </div>
+                {codeMetrics.map(({ label, value }) => (
+                  <div key={label}>
+                    <Text tone="muted" size="sm">{label}</Text>
+                    <strong>
+                      {formatNumber(value)}
+                      {isCodeVolumeLoading && <span className="loading-dots">...</span>}
+                    </strong>
+                  </div>
+                ))}
               </div>
               {stats.codeVolume.scope.isPartial && (
                 <Text className="partial-note" tone="muted" size="sm">

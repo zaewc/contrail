@@ -10,13 +10,13 @@ import {
   Tooltip,
 } from 'recharts';
 import { GitHubStats } from '../api.js';
+import { formatNumber } from '../utils/format.js';
 
 interface StatsCardProps {
   stats: GitHubStats;
 }
 
 export const StatsCard: React.FC<StatsCardProps> = ({ stats }) => {
-  const formatNumber = (n: number): string => n.toLocaleString('en-US');
   const radialItems = [
     { label: 'Commits', value: stats.totals.commits },
     { label: 'PR', value: stats.totals.pullRequests },
