@@ -54,7 +54,6 @@ export const TechTreemap: React.FC<TechTreemapProps> = ({ items }) => {
                   fill={fill}
                   stroke="var(--bg-secondary)"
                   strokeWidth={4}
-                  rx={6}
                 />
                 {showLabel && (
                   <>
