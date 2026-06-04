@@ -138,8 +138,12 @@ interface CachedUserData {
 async function getRepositoriesAndProfile(
   login: string
 ): Promise<ProfileAndRepositories> {
-  const query = `
-    query UserRepositories($login: String!) {
+  // Fetching both repository connections in one query serializes their (slow,
+  // server-side) computation for prolific users. Split them into two queries
+  // that run concurrently; only the owned-repositories query carries identity
+  // and must succeed.
+  const ownedQuery = `
+    query UserOwnedRepositories($login: String!) {
       user(login: $login) {
         id
         login
@@ -154,6 +158,12 @@ async function getRepositoriesAndProfile(
             ${repositoryFields()}
           }
         }
+      }
+    }
+  `;
+  const contributedQuery = `
+    query UserContributedRepositories($login: String!) {
+      user(login: $login) {
         repositoriesContributedTo(
           first: 100
           contributionTypes: [COMMIT, ISSUE, PULL_REQUEST, PULL_REQUEST_REVIEW, REPOSITORY]
@@ -168,18 +178,29 @@ async function getRepositoriesAndProfile(
     }
   `;
 
-  const data = await queryGitHubGraphQL(query, { login });
+  const [ownedResult, contributedResult] = await Promise.allSettled([
+    queryGitHubGraphQL(ownedQuery, { login }),
+    queryGitHubGraphQL(contributedQuery, { login }),
+  ]);
+
+  if (ownedResult.status !== 'fulfilled') {
+    throw ownedResult.reason instanceof Error
+      ? ownedResult.reason
+      : new Error('USER_NOT_FOUND');
+  }
+  const owned = ownedResult.value;
+  const contributed =
+    contributedResult.status === 'fulfilled'
+      ? contributedResult.value.user.repositoriesContributedTo
+      : { totalCount: 0, nodes: [] as GitHubRepositoryNode[] };
 
   return {
-    id: data.user.id,
-    login: data.user.login,
-    name: data.user.name,
-    avatarUrl: data.user.avatarUrl,
-    repositoryNodes: [
-      ...data.user.repositories.nodes,
-      ...data.user.repositoriesContributedTo.nodes,
-    ],
-    repositoryCount: data.user.repositoriesContributedTo.totalCount,
+    id: owned.user.id,
+    login: owned.user.login,
+    name: owned.user.name,
+    avatarUrl: owned.user.avatarUrl,
+    repositoryNodes: [...owned.user.repositories.nodes, ...contributed.nodes],
+    repositoryCount: contributed.totalCount,
   };
 }
 
