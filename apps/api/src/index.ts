@@ -1,10 +1,10 @@
 import 'dotenv/config.js';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
-import { getGitHubStats } from './github.js';
+import { getGitHubStats, getTechStack } from './github.js';
 import { getCached, setCached } from './cache.js';
 import { renderStatsSvg } from './svg.js';
-import type { GitHubStats } from './types.js';
+import type { GitHubStats, TechStackItem } from './types.js';
 
 const PORT = parseInt(process.env.PORT || '4000', 10);
 const CACHE_TTL = parseInt(process.env.CACHE_TTL_SECONDS || '21600', 10);
@@ -61,9 +61,11 @@ fastify.get<{ Params: { login: string }; Querystring: { commitLimit?: string } }
       const pending = pendingStatsRequests.get(key);
       const stats =
         pending ??
-        getGitHubStats(login, { commitLimit }).finally(() => {
-          pendingStatsRequests.delete(key);
-        });
+        getGitHubStats(login, { commitLimit, includeTechStack: false }).finally(
+          () => {
+            pendingStatsRequests.delete(key);
+          }
+        );
 
       if (!pending) {
         pendingStatsRequests.set(key, stats);
@@ -101,6 +103,59 @@ fastify.get<{ Params: { login: string }; Querystring: { commitLimit?: string } }
   }
 );
 
+// Tech-stack endpoint (loaded separately from /stats by the web client)
+const techStackCacheKey = (login: string) =>
+  `github:techstack:response:${login.toLowerCase()}:v1`;
+const pendingTechStackRequests = new Map<string, Promise<TechStackItem[]>>();
+
+fastify.get<{ Params: { login: string } }>(
+  '/api/users/:login/techstack',
+  async (request, reply) => {
+    const { login } = request.params;
+    const key = techStackCacheKey(login);
+
+    const cached = getCached<TechStackItem[]>(key);
+    if (cached) {
+      return { techStack: cached };
+    }
+
+    try {
+      const pending = pendingTechStackRequests.get(key);
+      const promise =
+        pending ??
+        getTechStack(login).finally(() => {
+          pendingTechStackRequests.delete(key);
+        });
+
+      if (!pending) {
+        pendingTechStackRequests.set(key, promise);
+      }
+
+      const techStack = await promise;
+      setCached(key, techStack, CACHE_TTL);
+      return { techStack };
+    } catch (error: any) {
+      if (error.message === 'USER_NOT_FOUND') {
+        reply.code(404).send({ error: 'User not found' });
+        return;
+      }
+      if (error.message === 'INVALID_LOGIN') {
+        reply.code(400).send({ error: 'Invalid login' });
+        return;
+      }
+      if (
+        error.message === 'GITHUB_API_ERROR' ||
+        error.message.includes('rate limit')
+      ) {
+        reply.code(502).send({ error: 'GitHub API error' });
+        return;
+      }
+      fastify.log.error(error);
+      reply.code(500).send({ error: 'Internal server error' });
+    }
+  }
+);
+
 // SVG card endpoint
 fastify.get<{ Params: { login: string } }>(
   '/api/users/:login/card.svg',
@@ -120,11 +175,17 @@ fastify.get<{ Params: { login: string } }>(
       const cachedStats = getCached<GitHubStats>(statsCacheKey(login));
       const stats = cachedStats ?? (await getGitHubStats(login, {
         commitLimit: DEFAULT_INCREMENTAL_COMMIT_LIMIT,
+        includeTechStack: false,
       }));
       if (!cachedStats) {
         setCached(statsCacheKey(login), stats, CACHE_TTL);
       }
-      const svg = renderStatsSvg(stats);
+      // /stats responses are cached without tech stack, so resolve it here
+      // (using its own cache) to keep the rendered card complete.
+      const techStack = stats.techStack.length
+        ? stats.techStack
+        : await getTechStack(login);
+      const svg = renderStatsSvg({ ...stats, techStack });
 
       // Cache the result
       setCached(svgCacheKey(login), svg, CACHE_TTL);

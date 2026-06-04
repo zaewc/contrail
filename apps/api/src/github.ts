@@ -30,6 +30,10 @@ const techStackCacheKey = (login: string) =>
 
 interface GitHubStatsOptions {
   commitLimit?: number | null;
+  // Tech-stack analysis scans /languages for every repository and is the
+  // slowest part of the response for prolific users. The web client loads it
+  // separately via getTechStack so the code-volume panel is not blocked by it.
+  includeTechStack?: boolean;
 }
 
 function mergeCalendars(calendars: ContributionDay[][]): ContributionDay[] {
@@ -370,19 +374,22 @@ export async function getGitHubStats(
   );
   const streaks = calculateStreaks(mergedCalendar);
   const commitLimit = options.commitLimit ?? DEFAULT_COMMIT_LIMIT;
-  const cachedTechStack = getCached<TechStackItem[]>(
-    techStackCacheKey(profile.login)
-  );
-  const techStackPromise: Promise<TechStackItem[]> = cachedTechStack
-    ? Promise.resolve(cachedTechStack)
-    : analyzeTechStack(repositories).then((result) => {
-        setCached(
-          techStackCacheKey(profile.login),
-          result,
-          COMPONENT_CACHE_TTL
-        );
-        return result;
-      });
+  const includeTechStack = options.includeTechStack !== false;
+  const cachedTechStack = includeTechStack
+    ? getCached<TechStackItem[]>(techStackCacheKey(profile.login))
+    : null;
+  const techStackPromise: Promise<TechStackItem[]> = !includeTechStack
+    ? Promise.resolve<TechStackItem[]>([])
+    : cachedTechStack
+      ? Promise.resolve(cachedTechStack)
+      : analyzeTechStack(repositories).then((result) => {
+          setCached(
+            techStackCacheKey(profile.login),
+            result,
+            COMPONENT_CACHE_TTL
+          );
+          return result;
+        });
   const [codeVolume, techStack] = await Promise.all([
     analyzeCodeVolume(profile.login, repositories, {
       years: DEFAULT_CODE_VOLUME_YEARS,
@@ -428,4 +435,34 @@ export async function getGitHubStats(
     codeVolume,
     contributionTypeRatios,
   };
+}
+
+// Tech-stack analysis is loaded separately from the main stats response so the
+// (slow) per-repository language scan does not block the code-volume panel.
+export async function getTechStack(login: string): Promise<TechStackItem[]> {
+  try {
+    loginSchema.parse(login);
+  } catch (e) {
+    throw new Error('INVALID_LOGIN');
+  }
+
+  const cached = getCached<TechStackItem[]>(techStackCacheKey(login));
+  if (cached) {
+    return cached;
+  }
+
+  // Reuse the repository list cached by a prior /stats call when available to
+  // avoid re-fetching it; otherwise fetch just the profile/repositories.
+  const cachedUserData = getCached<CachedUserData>(userDataCacheKey(login));
+  const profile = cachedUserData
+    ? cachedUserData.profile
+    : await getRepositoriesAndProfile(login);
+
+  const repositories = normalizeRepositories(
+    profile.login,
+    profile.repositoryNodes
+  );
+  const techStack = await analyzeTechStack(repositories);
+  setCached(techStackCacheKey(profile.login), techStack, COMPONENT_CACHE_TTL);
+  return techStack;
 }

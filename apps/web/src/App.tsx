@@ -10,7 +10,13 @@ import {
   Text,
   TextField,
 } from '@zaemoru/react';
-import { fetchStats, getCardUrl, GitHubStats } from './api.js';
+import {
+  fetchStats,
+  fetchTechStack,
+  getCardUrl,
+  GitHubStats,
+  TechStackItem,
+} from './api.js';
 import { StatsCard } from './components/StatsCard.js';
 import { ContributionGrid } from './components/ContributionGrid.js';
 import { TechTreemap } from './components/TechTreemap.js';
@@ -34,6 +40,9 @@ export const App: React.FC = () => {
   const [input, setInput] = useState('');
   const [state, setState] = useState<AppState>('empty');
   const [stats, setStats] = useState<GitHubStats | null>(null);
+  // Tech stack loads separately from the main stats so the slow per-repo
+  // language scan doesn't block the rest of the dashboard. null = still loading.
+  const [techStack, setTechStack] = useState<TechStackItem[] | null>(null);
   const [error, setError] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const activeRequestRef = useRef(0);
@@ -61,6 +70,7 @@ export const App: React.FC = () => {
     setState('loading');
     setError('');
     setStats(null);
+    setTechStack(null);
 
     try {
       const result = await fetchStats(login, INITIAL_COMMIT_LIMIT);
@@ -69,6 +79,7 @@ export const App: React.FC = () => {
       }
       setStats(result);
       setState('success');
+      void loadTechStack(login, requestId);
       if (result.codeVolume.scope.isPartial) {
         void refreshStatsIncrementally(login, requestId, result);
       }
@@ -107,6 +118,20 @@ export const App: React.FC = () => {
         previousAnalyzed = nextAnalyzed;
       } catch {
         return;
+      }
+    }
+  };
+
+  const loadTechStack = async (login: string, requestId: number) => {
+    try {
+      const result = await fetchTechStack(login);
+      if (activeRequestRef.current !== requestId) {
+        return;
+      }
+      setTechStack(result);
+    } catch {
+      if (activeRequestRef.current === requestId) {
+        setTechStack([]);
       }
     }
   };
@@ -272,7 +297,14 @@ export const App: React.FC = () => {
 
           <Section className="section-block" title="기술스택" gap="medium">
             <Card className="analysis-card full-width" elevation="low" padding="large">
-              <TechTreemap items={stats.techStack} />
+              {techStack === null ? (
+                <div className="techstack-loading">
+                  <Spinner />
+                  <Text tone="muted" size="sm">기술스택 분석 중...</Text>
+                </div>
+              ) : (
+                <TechTreemap items={techStack} />
+              )}
             </Card>
           </Section>
 

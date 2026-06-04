@@ -141,6 +141,17 @@ export async function fetchStats(
   return response.json();
 }
 
+export async function fetchTechStack(login: string): Promise<TechStackItem[]> {
+  const response = await fetch(`${API_BASE}/users/${login}/techstack`);
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch tech stack');
+  }
+
+  const data = (await response.json()) as { techStack: TechStackItem[] };
+  return data.techStack;
+}
+
 export function getCardUrl(login: string): string {
   return `${API_BASE}/users/${login}/card.svg`;
 }
