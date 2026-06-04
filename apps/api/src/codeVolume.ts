@@ -195,19 +195,24 @@ async function fetchCommitShasByUserId(
   repo: ContributedRepository,
   authorId: string,
   since: string,
-  after?: string | null
+  after?: string | null,
+  first: number = 100
 ): Promise<{
   commits: CommitListItem[];
   hasNextPage: boolean;
   endCursor: string | null;
 }> {
+  // GitHub computes additions/deletions/changedFiles per commit on the server,
+  // which dominates query latency and scales with the page size. Requesting only
+  // as many commits as we still need keeps the diff computation proportional to
+  // the work, dramatically speeding up the cold/initial gather.
   const query = `
-    query RepositoryCommitHistory($owner: String!, $name: String!, $authorId: ID!, $since: GitTimestamp!, $after: String) {
+    query RepositoryCommitHistory($owner: String!, $name: String!, $authorId: ID!, $since: GitTimestamp!, $after: String, $first: Int!) {
       repository(owner: $owner, name: $name) {
         defaultBranchRef {
           target {
             ... on Commit {
-              history(first: 100, after: $after, author: { id: $authorId }, since: $since) {
+              history(first: $first, after: $after, author: { id: $authorId }, since: $since) {
                 pageInfo {
                   hasNextPage
                   endCursor
@@ -231,6 +236,7 @@ async function fetchCommitShasByUserId(
     authorId,
     since,
     after,
+    first: Math.max(1, Math.min(100, first)),
   })) as CommitHistoryResponse;
   const history = data.repository?.defaultBranchRef?.target?.history;
 
@@ -253,6 +259,14 @@ async function gatherWithAuthorId(
 ): Promise<void> {
   while (entry.queue.length > 0 && entry.candidates.length < targetCommitCount) {
     const batch = entry.queue.splice(0, COMMIT_LIST_CONCURRENCY);
+    // Split the still-needed commit budget across the repositories in this batch
+    // so each query only computes diff stats for roughly the commits we need.
+    // When few repositories remain, the page size grows back toward 100; for an
+    // unbounded limit it clamps to 100 inside fetchCommitShasByUserId.
+    const remaining = targetCommitCount - entry.candidates.length;
+    const pageSize = Number.isFinite(remaining)
+      ? Math.max(1, Math.ceil(remaining / batch.length))
+      : 100;
     const results = await Promise.allSettled(
       batch.map(async (state) => ({
         state,
@@ -260,7 +274,8 @@ async function gatherWithAuthorId(
           state.repo,
           authorId,
           entry.since,
-          state.cursor
+          state.cursor,
+          pageSize
         ),
       }))
     );

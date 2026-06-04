@@ -3,7 +3,6 @@ import {
   ContributedRepository,
   GitHubRepositoryNode,
   GitHubStats,
-  GitHubUserData,
   ContributionDay,
   TechStackItem,
 } from './types.js';
@@ -108,35 +107,44 @@ function normalizeRepositories(
   );
 }
 
-async function getUserDataForYear(
-  login: string,
-  fromDate: string,
-  toDate: string
-): Promise<GitHubUserData> {
+interface ProfileAndRepositories {
+  id: string;
+  login: string;
+  name: string | null;
+  avatarUrl: string;
+  repositoryNodes: GitHubRepositoryNode[];
+  repositoryCount: number;
+}
+
+interface YearContributions {
+  calendar: ContributionDay[];
+  totalContributions: number;
+  totalCommitContributions: number;
+  totalPullRequestContributions: number;
+  totalIssueContributions: number;
+  totalPullRequestReviewContributions: number;
+  restrictedContributionsCount: number;
+}
+
+interface CachedUserData {
+  profile: ProfileAndRepositories;
+  years: YearContributions[];
+}
+
+// The repository lists are not date-filtered, so they are identical for every
+// year in the range. Fetch them once (instead of repeating them inside all five
+// per-year contribution queries) to roughly halve the cold user-data latency and
+// the GitHub API load.
+async function getRepositoriesAndProfile(
+  login: string
+): Promise<ProfileAndRepositories> {
   const query = `
-    query UserContributions($login: String!, $from: DateTime!, $to: DateTime!) {
+    query UserRepositories($login: String!) {
       user(login: $login) {
         id
         login
         name
         avatarUrl
-        contributionsCollection(from: $from, to: $to) {
-          contributionCalendar {
-            totalContributions
-            weeks {
-              contributionDays {
-                date
-                contributionCount
-                color
-              }
-            }
-          }
-          totalCommitContributions
-          totalPullRequestContributions
-          totalIssueContributions
-          totalPullRequestReviewContributions
-          restrictedContributionsCount
-        }
         repositories(
           first: 100
           ownerAffiliations: OWNER
@@ -160,16 +168,59 @@ async function getUserDataForYear(
     }
   `;
 
+  const data = await queryGitHubGraphQL(query, { login });
+
+  return {
+    id: data.user.id,
+    login: data.user.login,
+    name: data.user.name,
+    avatarUrl: data.user.avatarUrl,
+    repositoryNodes: [
+      ...data.user.repositories.nodes,
+      ...data.user.repositoriesContributedTo.nodes,
+    ],
+    repositoryCount: data.user.repositoriesContributedTo.totalCount,
+  };
+}
+
+async function getContributionsForYear(
+  login: string,
+  fromDate: string,
+  toDate: string
+): Promise<YearContributions> {
+  const query = `
+    query UserContributions($login: String!, $from: DateTime!, $to: DateTime!) {
+      user(login: $login) {
+        contributionsCollection(from: $from, to: $to) {
+          contributionCalendar {
+            totalContributions
+            weeks {
+              contributionDays {
+                date
+                contributionCount
+                color
+              }
+            }
+          }
+          totalCommitContributions
+          totalPullRequestContributions
+          totalIssueContributions
+          totalPullRequestReviewContributions
+          restrictedContributionsCount
+        }
+      }
+    }
+  `;
+
   const data = await queryGitHubGraphQL(query, {
     login,
     from: fromDate,
     to: toDate,
   });
 
-  // Flatten weeks into calendar array
+  const collection = data.user.contributionsCollection;
   const calendar: ContributionDay[] = [];
-  for (const week of data.user.contributionsCollection.contributionCalendar
-    .weeks) {
+  for (const week of collection.contributionCalendar.weeks) {
     for (const day of week.contributionDays) {
       calendar.push({
         date: day.date,
@@ -180,35 +231,14 @@ async function getUserDataForYear(
   }
 
   return {
-    id: data.user.id,
-    login: data.user.login,
-    name: data.user.name,
-    avatarUrl: data.user.avatarUrl,
-    contributionsCollection: {
-      contributionCalendar: {
-        totalContributions:
-          data.user.contributionsCollection.contributionCalendar
-            .totalContributions,
-        weeks: [
-          {
-            contributionDays: calendar,
-          },
-        ],
-      },
-      totalCommitContributions:
-        data.user.contributionsCollection.totalCommitContributions,
-      totalPullRequestContributions:
-        data.user.contributionsCollection.totalPullRequestContributions,
-      totalIssueContributions:
-        data.user.contributionsCollection.totalIssueContributions,
-      totalPullRequestReviewContributions:
-        data.user.contributionsCollection.totalPullRequestReviewContributions,
-      restrictedContributionsCount:
-        data.user.contributionsCollection.restrictedContributionsCount,
-    },
-    repositoriesContributedTo:
-      data.user.repositoriesContributedTo,
-    repositories: data.user.repositories,
+    calendar,
+    totalContributions: collection.contributionCalendar.totalContributions,
+    totalCommitContributions: collection.totalCommitContributions,
+    totalPullRequestContributions: collection.totalPullRequestContributions,
+    totalIssueContributions: collection.totalIssueContributions,
+    totalPullRequestReviewContributions:
+      collection.totalPullRequestReviewContributions,
+    restrictedContributionsCount: collection.restrictedContributionsCount,
   };
 }
 
@@ -239,23 +269,20 @@ export async function getGitHubStats(
 
   ranges.reverse();
 
-  const allYearData: GitHubUserData[] = [];
-  const allCalendars: ContributionDay[][] = [];
+  let profile: ProfileAndRepositories;
+  let years: YearContributions[];
 
-  const cachedUserData = getCached<GitHubUserData[]>(userDataCacheKey(login));
+  const cachedUserData = getCached<CachedUserData>(userDataCacheKey(login));
   if (cachedUserData) {
-    allYearData.push(...cachedUserData);
-    for (const yearData of cachedUserData) {
-      allCalendars.push(
-        yearData.contributionsCollection.contributionCalendar.weeks.flatMap(
-          (w) => w.contributionDays
-        )
-      );
-    }
+    profile = cachedUserData.profile;
+    years = cachedUserData.years;
   } else {
-    const yearResults = await Promise.allSettled(
+    // Start the repository/profile query and all per-year contribution queries
+    // concurrently; only the profile query is required to succeed.
+    const profilePromise = getRepositoriesAndProfile(login);
+    const yearResultsPromise = Promise.allSettled(
       ranges.map((range) =>
-        getUserDataForYear(
+        getContributionsForYear(
           login,
           range.from.toISOString(),
           range.to.toISOString()
@@ -263,42 +290,37 @@ export async function getGitHubStats(
       )
     );
 
+    try {
+      profile = await profilePromise;
+    } catch (error) {
+      throw error instanceof Error ? error : new Error('USER_NOT_FOUND');
+    }
+
+    const yearResults = await yearResultsPromise;
+    years = [];
     for (const result of yearResults) {
       if (result.status === 'fulfilled') {
-        const yearData = result.value;
-        allYearData.push(yearData);
-        allCalendars.push(
-          yearData.contributionsCollection.contributionCalendar.weeks.flatMap(
-            (w) => w.contributionDays
-          )
-        );
+        years.push(result.value);
         continue;
       }
 
       const error = result.reason;
-      if (error instanceof Error) {
-        if (error.message === 'USER_NOT_FOUND') {
-          throw error;
-        }
-        // Skip year on partial failure
-        console.error(`Failed to fetch data for year: ${error.message}`);
-      } else {
-        console.error('Failed to fetch data for year');
+      if (error instanceof Error && error.message === 'USER_NOT_FOUND') {
+        throw error;
       }
+      // Skip year on partial failure
+      console.error(
+        `Failed to fetch contributions for year: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`
+      );
     }
 
-    if (allYearData.length === 0) {
-      throw new Error('USER_NOT_FOUND');
-    }
-
-    setCached(userDataCacheKey(login), allYearData, COMPONENT_CACHE_TTL);
+    setCached(userDataCacheKey(login), { profile, years }, COMPONENT_CACHE_TTL);
   }
 
-  // Use first year data for user info
-  const firstYear = allYearData[0];
-
   // Merge calendars
-  const mergedCalendar = mergeCalendars(allCalendars);
+  const mergedCalendar = mergeCalendars(years.map((year) => year.calendar));
 
   // Merge totals
   let totalContributions = 0;
@@ -307,73 +329,63 @@ export async function getGitHubStats(
   let totalIssues = 0;
   let totalPullRequestReviews = 0;
   let totalRestricted = 0;
-  const repositoryNodes: GitHubRepositoryNode[] = [];
 
-  for (const yearData of allYearData) {
-    totalContributions +=
-      yearData.contributionsCollection.contributionCalendar.totalContributions;
-    totalCommits +=
-      yearData.contributionsCollection.totalCommitContributions;
-    totalPullRequests +=
-      yearData.contributionsCollection.totalPullRequestContributions;
-    totalIssues +=
-      yearData.contributionsCollection.totalIssueContributions;
-    totalPullRequestReviews +=
-      yearData.contributionsCollection.totalPullRequestReviewContributions;
-    totalRestricted +=
-      yearData.contributionsCollection.restrictedContributionsCount;
-    repositoryNodes.push(
-      ...yearData.repositories.nodes,
-      ...yearData.repositoriesContributedTo.nodes
-    );
+  for (const year of years) {
+    totalContributions += year.totalContributions;
+    totalCommits += year.totalCommitContributions;
+    totalPullRequests += year.totalPullRequestContributions;
+    totalIssues += year.totalIssueContributions;
+    totalPullRequestReviews += year.totalPullRequestReviewContributions;
+    totalRestricted += year.restrictedContributionsCount;
   }
 
-  // Repository count from last year (most recent)
-  const repositoryCount =
-    allYearData[allYearData.length - 1].repositoriesContributedTo.totalCount;
+  const repositoryCount = profile.repositoryCount;
 
   const from = ranges[0].from;
   const to = ranges[ranges.length - 1].to;
-  const repositories = normalizeRepositories(firstYear.login, repositoryNodes);
+  const repositories = normalizeRepositories(
+    profile.login,
+    profile.repositoryNodes
+  );
   const streaks = calculateStreaks(mergedCalendar);
   const commitLimit = options.commitLimit ?? DEFAULT_COMMIT_LIMIT;
   const cachedTechStack = getCached<TechStackItem[]>(
-    techStackCacheKey(firstYear.login)
+    techStackCacheKey(profile.login)
   );
   const techStackPromise: Promise<TechStackItem[]> = cachedTechStack
     ? Promise.resolve(cachedTechStack)
     : analyzeTechStack(repositories).then((result) => {
         setCached(
-          techStackCacheKey(firstYear.login),
+          techStackCacheKey(profile.login),
           result,
           COMPONENT_CACHE_TTL
         );
         return result;
       });
   const [codeVolume, techStack] = await Promise.all([
-    analyzeCodeVolume(firstYear.login, repositories, {
+    analyzeCodeVolume(profile.login, repositories, {
       years: DEFAULT_CODE_VOLUME_YEARS,
       commitLimit,
       repositoryLimit:
         commitLimit === null || commitLimit > 100
           ? 100
           : DEFAULT_REPOSITORY_LIMIT,
-    }, firstYear.id),
+    }, profile.id),
     techStackPromise,
   ]);
   const contributionTypeRatios =
     process.env.ANALYZE_CONTRIBUTION_RATIOS === 'true'
       ? await analyzeContributionTypeRatios(
-          firstYear.login,
+          profile.login,
           repositories,
           codeVolume
         )
       : [];
 
   return {
-    login: firstYear.login,
-    name: firstYear.name,
-    avatarUrl: firstYear.avatarUrl,
+    login: profile.login,
+    name: profile.name,
+    avatarUrl: profile.avatarUrl,
     range: {
       from: from.toISOString(),
       to: to.toISOString(),
