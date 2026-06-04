@@ -33,6 +33,10 @@ const CANDIDATE_CACHE_TTL = parseInt(
   process.env.CACHE_TTL_SECONDS || '21600',
   10
 );
+const COMMIT_DETAIL_CACHE_TTL = readPositiveIntegerEnv(
+  'COMMIT_DETAIL_CACHE_TTL',
+  604800
+);
 
 type CommitListItem = {
   sha: string;
@@ -105,21 +109,43 @@ type CandidateCacheEntry = {
 const candidateCacheKey = (login: string) =>
   `github:candidates:${login.toLowerCase()}:v1`;
 
-function isCacheCompatible(
+const commitDetailCacheKey = (owner: string, name: string, sha: string) =>
+  `github:commit-detail:${owner.toLowerCase()}/${name.toLowerCase()}@${sha}:v1`;
+
+// A cached candidate list can be reused when the author/window match and the
+// cached repositories are a prefix of the requested ones. Because repositories
+// are sorted stably, a smaller repositoryLimit (e.g. the fast initial request)
+// always produces a prefix of a larger one, so the gathered candidates remain
+// valid and we only need to extend coverage to the newly added repositories.
+function isCacheReusable(
   entry: CandidateCacheEntry,
   authorId: string | undefined,
   years: number,
-  repositoryLimit: number,
   targetRepoNames: string[]
 ): boolean {
   if (entry.authorId !== (authorId ?? null)) return false;
   if (entry.years !== years) return false;
-  if (entry.repositoryLimit !== repositoryLimit) return false;
-  if (entry.targetRepositoryNames.length !== targetRepoNames.length) return false;
-  for (let i = 0; i < targetRepoNames.length; i++) {
+  if (entry.targetRepositoryNames.length > targetRepoNames.length) return false;
+  for (let i = 0; i < entry.targetRepositoryNames.length; i++) {
     if (entry.targetRepositoryNames[i] !== targetRepoNames[i]) return false;
   }
   return true;
+}
+
+async function fetchCommitDetailCached(
+  repo: ContributedRepository,
+  sha: string
+): Promise<CommitDetail> {
+  const key = commitDetailCacheKey(repo.owner, repo.name, sha);
+  const cached = getCached<CommitDetail>(key);
+  if (cached) {
+    return cached;
+  }
+  const detail = await githubRest<CommitDetail>(
+    `/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}/commits/${sha}`
+  );
+  setCached(key, detail, COMMIT_DETAIL_CACHE_TTL);
+  return detail;
 }
 
 function addCommitDetailToStats(
@@ -269,15 +295,14 @@ async function gatherWithAuthorId(
 
 async function gatherWithRestFallback(
   entry: CandidateCacheEntry,
-  login: string,
-  targetRepositories: ContributedRepository[]
+  login: string
 ): Promise<void> {
-  if (entry.exhausted) {
-    return;
-  }
-
-  for (let i = 0; i < targetRepositories.length; i += COMMIT_LIST_CONCURRENCY) {
-    const batch = targetRepositories.slice(i, i + COMMIT_LIST_CONCURRENCY);
+  // Drain the queue so reused entries only fetch newly added repositories
+  // instead of re-listing commits for repositories already gathered.
+  while (entry.queue.length > 0) {
+    const batch = entry.queue
+      .splice(0, COMMIT_LIST_CONCURRENCY)
+      .map((state) => state.repo);
     const results = await Promise.allSettled(
       batch.map(async (repo) => ({
         repo,
@@ -340,15 +365,24 @@ export async function analyzeCodeVolume(
   let entry: CandidateCacheEntry;
   if (
     cached &&
-    isCacheCompatible(
-      cached,
-      authorId,
-      safeOptions.years,
-      safeOptions.repositoryLimit,
-      targetRepoNames
-    )
+    isCacheReusable(cached, authorId, safeOptions.years, targetRepoNames)
   ) {
     entry = cached;
+    // When the request widens the repository scope (e.g. the fast initial
+    // request used a smaller repositoryLimit), keep the already gathered
+    // candidates and only queue the newly added repositories.
+    if (targetRepoNames.length > entry.targetRepositoryNames.length) {
+      const addedRepositories = targetRepositories.slice(
+        entry.targetRepositoryNames.length
+      );
+      for (const repo of addedRepositories) {
+        entry.queue.push({ repo, cursor: null });
+      }
+      entry.targetRepositoryNames = targetRepoNames;
+      entry.repositoryLimit = safeOptions.repositoryLimit;
+      entry.initialPartialFromRepoLimit = initialPartialFromRepoLimit;
+      entry.exhausted = false;
+    }
   } else {
     const since = new Date();
     since.setFullYear(since.getFullYear() - safeOptions.years);
@@ -375,7 +409,7 @@ export async function analyzeCodeVolume(
     if (authorId) {
       await gatherWithAuthorId(entry, authorId, targetCommitCount);
     } else {
-      await gatherWithRestFallback(entry, login, targetRepositories);
+      await gatherWithRestFallback(entry, login);
     }
     setCached(cacheKey, entry, CANDIDATE_CACHE_TTL);
   }
@@ -432,9 +466,7 @@ export async function analyzeCodeVolume(
       const batch = commitsToAnalyze.slice(i, i + COMMIT_DETAIL_CONCURRENCY);
       const results = await Promise.allSettled(
         batch.map(({ repo, commit }) =>
-          githubRest<CommitDetail>(
-            `/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}/commits/${commit.sha}`
-          )
+          fetchCommitDetailCached(repo, commit.sha)
         )
       );
 
