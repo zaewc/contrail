@@ -180,12 +180,7 @@ fastify.get<{ Params: { login: string } }>(
       if (!cachedStats) {
         setCached(statsCacheKey(login), stats, CACHE_TTL);
       }
-      // /stats responses are cached without tech stack, so resolve it here
-      // (using its own cache) to keep the rendered card complete.
-      const techStack = stats.techStack.length
-        ? stats.techStack
-        : await getTechStack(login);
-      const svg = renderStatsSvg({ ...stats, techStack });
+      const svg = renderStatsSvg(stats);
 
       // Cache the result
       setCached(svgCacheKey(login), svg, CACHE_TTL);

@@ -9,63 +9,63 @@ function escapeXml(str: string): string {
     .replace(/'/g, '&apos;');
 }
 
-function getColorIntensity(count: number): string {
-  if (count === 0) return '#0d1117';
-  if (count <= 3) return '#0e4429';
-  if (count <= 9) return '#006d32';
-  if (count <= 20) return '#26a641';
-  return '#39d353';
-}
-
-function renderContributionPreview(stats: GitHubStats): string {
-  // Get last 52 weeks
-  const sorted = [...stats.calendar].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
-  const last52weeks = sorted.slice(0, 364);
-
-  // Create a grid of weeks (7 days per week)
-  const cells = last52weeks
-    .reverse()
-    .map((day, idx) => {
-      const x = (idx % 52) * 3;
-      const y = (Math.floor(idx / 52)) * 3;
-      const color = getColorIntensity(day.count);
-      return `<rect x="${x}" y="${y}" width="2.5" height="2.5" fill="${color}" rx="0.3"/>`;
-    })
-    .join('');
-
-  return `
-    <g>
-      <text x="0" y="12" font-size="10" font-weight="bold" fill="#c9d1d9">Contributions</text>
-      <g transform="translate(0, 18)">
-        ${cells}
-      </g>
-    </g>
-  `;
-}
-
 export function renderStatsSvg(stats: GitHubStats): string {
   const bgColor = '#0d1117';
   const textColor = '#c9d1d9';
-  const accentColor = '#39d353';
+  const addColor = '#3fb950';
+  const deleteColor = '#f85149';
   const width = 450;
-  const height = 320;
+  const height = 220;
 
-  const formatNumber = (n: number) =>
-    n.toLocaleString('en-US');
+  const formatNumber = (n: number) => n.toLocaleString('en-US');
   const formatCompact = (n: number) =>
     Intl.NumberFormat('en-US', {
       notation: 'compact',
       maximumFractionDigits: 1,
     }).format(n);
-  const topStack =
-    stats.techStack
-      .slice(0, 3)
-      .map((item) => item.name)
-      .join(' · ') || 'N/A';
 
-  const preview = renderContributionPreview(stats);
+  // x positions for a 4-column grid within the 20px side margins.
+  const columns = [20, 125, 230, 335];
+  const cellWidth = 95;
+  const cellHeight = 58;
+
+  const renderCell = (
+    x: number,
+    y: number,
+    value: string,
+    label: string,
+    valueColor: string = textColor
+  ) => `
+    <rect x="${x}" y="${y}" width="${cellWidth}" height="${cellHeight}" class="contrail-border" rx="4"/>
+    <text class="contrail-stat-value" x="${x + 10}" y="${y + 33}" fill="${valueColor}">${value}</text>
+    <text class="contrail-stat-label" x="${x + 10}" y="${y + 50}" fill="#8b949e">${label}</text>
+  `;
+
+  const row1Y = 72;
+  const row2Y = row1Y + cellHeight + 12;
+
+  const cells = [
+    renderCell(columns[0], row1Y, formatNumber(stats.totals.contributions), 'Contributions'),
+    renderCell(columns[1], row1Y, formatNumber(stats.totals.commits), 'Commits'),
+    renderCell(columns[2], row1Y, formatNumber(stats.totals.pullRequests), 'PRs'),
+    renderCell(columns[3], row1Y, formatNumber(stats.totals.issues), 'Issues'),
+    renderCell(columns[0], row2Y, formatNumber(stats.streaks.current), 'Current streak'),
+    renderCell(columns[1], row2Y, formatNumber(stats.streaks.max), 'Max streak'),
+    renderCell(
+      columns[2],
+      row2Y,
+      `+${formatCompact(stats.codeVolume.summary.additions)}`,
+      'Lines added',
+      addColor
+    ),
+    renderCell(
+      columns[3],
+      row2Y,
+      `-${formatCompact(stats.codeVolume.summary.deletions)}`,
+      'Lines deleted',
+      deleteColor
+    ),
+  ].join('');
 
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg
@@ -81,11 +81,10 @@ export function renderStatsSvg(stats: GitHubStats): string {
       .contrail-bg { fill: ${bgColor}; }
       .contrail-text { fill: ${textColor}; font-family: 'Segoe UI', Tahoma, sans-serif; }
       .contrail-label { font-size: 11px; fill: #8b949e; }
-      .contrail-accent { fill: ${accentColor}; }
       .contrail-border { stroke: #30363d; stroke-width: 1; fill: none; }
-      .contrail-title { font-size: 18px; font-weight: bold; }
-      .contrail-stat-value { font-size: 16px; font-weight: bold; }
-      .contrail-stat-label { font-size: 10px; }
+      .contrail-title { font-size: 18px; font-weight: bold; font-family: 'Segoe UI', Tahoma, sans-serif; }
+      .contrail-stat-value { font-size: 16px; font-weight: bold; font-family: 'Segoe UI', Tahoma, sans-serif; }
+      .contrail-stat-label { font-size: 10px; font-family: 'Segoe UI', Tahoma, sans-serif; }
     </style>
   </defs>
 
@@ -96,53 +95,13 @@ export function renderStatsSvg(stats: GitHubStats): string {
   <rect class="contrail-border" x="0" y="0" width="${width}" height="${height}"/>
 
   <!-- Header -->
-  <text class="contrail-text contrail-title" x="20" y="30">contrail</text>
-  <text class="contrail-text contrail-label" x="20" y="48">GitHub contribution stats</text>
-
-  <!-- User Info -->
-  <text class="contrail-text" x="20" y="75" font-size="14" font-weight="bold">${escapeXml(stats.login)}</text>
-  <text class="contrail-text contrail-label" x="20" y="92">${escapeXml(stats.name || 'No name')} • Last 5 years</text>
+  <text class="contrail-text contrail-title" x="20" y="34">contrail</text>
+  <text class="contrail-text contrail-label" x="20" y="54">${escapeXml(stats.login)} • Last 5 years</text>
 
   <!-- Stats Grid -->
   <g>
-    <!-- Contributions -->
-    <rect x="20" y="110" width="90" height="60" class="contrail-border" rx="4"/>
-    <text class="contrail-text contrail-stat-value" x="30" y="140">${formatNumber(stats.totals.contributions)}</text>
-    <text class="contrail-text contrail-stat-label" x="30" y="160">Contributions</text>
-
-    <!-- Commits -->
-    <rect x="120" y="110" width="90" height="60" class="contrail-border" rx="4"/>
-    <text class="contrail-text contrail-stat-value" x="130" y="140">${formatNumber(stats.totals.commits)}</text>
-    <text class="contrail-text contrail-stat-label" x="130" y="160">Commits</text>
-
-    <!-- PRs -->
-    <rect x="220" y="110" width="90" height="60" class="contrail-border" rx="4"/>
-    <text class="contrail-text contrail-stat-value" x="230" y="140">${formatNumber(stats.totals.pullRequests)}</text>
-    <text class="contrail-text contrail-stat-label" x="230" y="160">PRs</text>
-
-    <!-- Issues -->
-    <rect x="320" y="110" width="110" height="60" class="contrail-border" rx="4"/>
-    <text class="contrail-text contrail-stat-value" x="330" y="140">${formatNumber(stats.totals.issues)}</text>
-    <text class="contrail-text contrail-stat-label" x="330" y="160">Issues</text>
-
-    <!-- Repositories -->
-    <rect x="20" y="180" width="90" height="60" class="contrail-border" rx="4"/>
-    <text class="contrail-text contrail-stat-value" x="30" y="210">${formatNumber(stats.totals.repositories)}</text>
-    <text class="contrail-text contrail-stat-label" x="30" y="230">Repos</text>
-
-    <!-- Advanced Summary -->
-    <text class="contrail-text contrail-label" x="20" y="260">Max streak: ${formatNumber(stats.streaks.max)} days</text>
-    <text class="contrail-text contrail-label" x="20" y="278">Code changes: ${formatCompact(stats.codeVolume.summary.changes)}</text>
-    <text class="contrail-text contrail-label" x="20" y="296">Top stack: ${escapeXml(topStack)}</text>
+    ${cells}
   </g>
-
-  <!-- Contribution Preview -->
-  <g transform="translate(130, 190)">
-    ${preview}
-  </g>
-
-  <!-- Footer -->
-  <text class="contrail-text contrail-label" x="20" y="${height - 8}">Generated by contrail • github.com</text>
 </svg>`;
 
   return svg;
