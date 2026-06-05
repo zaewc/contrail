@@ -152,6 +152,26 @@ export async function fetchTechStack(login: string): Promise<TechStackItem[]> {
   return data.techStack;
 }
 
+// The embed markdown is pasted into a GitHub README, where a relative path
+// would resolve against github.com and fail to load. Build an absolute URL from
+// the deployment origin (overridable via VITE_CARD_ORIGIN) so the card renders.
+function getPublicOrigin(): string {
+  const configured = import.meta.env.VITE_CARD_ORIGIN as string | undefined;
+  if (configured) {
+    return configured.replace(/\/$/, '');
+  }
+  if (typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+  return '';
+}
+
 export function getCardUrl(login: string): string {
-  return `${API_BASE}/users/${login}/card.svg`;
+  return `${getPublicOrigin()}${API_BASE}/users/${login}/card.svg`;
+}
+
+export function getEmbedMarkdown(login: string): string {
+  return `[![contrail](${getCardUrl(login)})](${getPublicOrigin()}/?user=${encodeURIComponent(
+    login
+  )})`;
 }

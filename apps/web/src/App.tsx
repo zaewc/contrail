@@ -13,7 +13,7 @@ import {
 import {
   fetchStats,
   fetchTechStack,
-  getCardUrl,
+  getEmbedMarkdown,
   GitHubStats,
   TechStackItem,
 } from './api.js';
@@ -57,12 +57,15 @@ export const App: React.FC = () => {
     [],
   );
 
-  const handleSearch = async () => {
-    const login = input.trim();
+  const handleSearch = async (overrideLogin?: string) => {
+    const login = (overrideLogin ?? input).trim();
     if (!login) {
       setError('Please enter a GitHub username');
       setState('error');
       return;
+    }
+    if (overrideLogin !== undefined && overrideLogin !== input) {
+      setInput(login);
     }
 
     const requestId = activeRequestRef.current + 1;
@@ -92,6 +95,16 @@ export const App: React.FC = () => {
       setState('error');
     }
   };
+
+  // Auto-load the user from a ?user= query param so the card embedded in a
+  // README can deep-link back into the live dashboard.
+  useEffect(() => {
+    const user = new URLSearchParams(window.location.search).get('user');
+    if (user && user.trim()) {
+      void handleSearch(user.trim());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const refreshStatsIncrementally = async (
     login: string,
@@ -142,10 +155,41 @@ export const App: React.FC = () => {
     }
   };
 
-  const copyToClipboard = () => {
+  const writeToClipboard = async (text: string): Promise<boolean> => {
+    // navigator.clipboard is only available in secure contexts; the app is
+    // served over plain HTTP, so fall back to a temporary textarea + execCommand.
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        // fall through to the legacy path
+      }
+    }
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.top = '-1000px';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      const succeeded = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return succeeded;
+    } catch {
+      return false;
+    }
+  };
+
+  const copyToClipboard = async () => {
     if (!stats) return;
-    const embedCode = `![contrail](${getCardUrl(stats.login)})`;
-    navigator.clipboard.writeText(embedCode);
+    const embedCode = getEmbedMarkdown(stats.login);
+    const succeeded = await writeToClipboard(embedCode);
+    if (!succeeded) {
+      return;
+    }
     setCopied(true);
     if (copiedTimeoutRef.current !== null) {
       clearTimeout(copiedTimeoutRef.current);
@@ -207,7 +251,7 @@ export const App: React.FC = () => {
               fullWidth
               loading={state === 'loading'}
               disabled={state === 'loading'}
-              onClick={handleSearch}
+              onClick={() => void handleSearch()}
             >
               Analyze
             </Button>
@@ -316,13 +360,16 @@ export const App: React.FC = () => {
 
           <Card className="embed-section" elevation="low" padding="large">
             <Heading level="3" size="sm">리드미에 넣기</Heading>
+            <Text className="embed-note" tone="muted" size="sm">
+              아래 마크다운을 GitHub README에 붙여넣으세요.
+            </Text>
             <div className="embed-code">
-              <code>![contrail]({getCardUrl(stats.login)})</code>
+              <code>{getEmbedMarkdown(stats.login)}</code>
               <Button
                 className="copy-button"
                 variant="secondary"
                 size="small"
-                onClick={copyToClipboard}
+                onClick={() => void copyToClipboard()}
               >
                 {copied ? 'Copied' : 'Copy'}
               </Button>

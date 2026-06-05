@@ -444,6 +444,11 @@ zm-button {
   margin-bottom: 30px;
 }
 
+.embed-note {
+  display: block;
+  margin: 4px 0 12px;
+}
+
 .embed-code {
   background-color: var(--bg-tertiary);
   border: 1px solid var(--border);
