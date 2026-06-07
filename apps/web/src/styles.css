@@ -584,19 +584,19 @@ body {
 }
 
 .contribution-cell-level-1 {
-  background-color: #cdbf9f;
+  background-color: #0e4429;
 }
 
 .contribution-cell-level-2 {
-  background-color: #a08a5f;
+  background-color: #006d32;
 }
 
 .contribution-cell-level-3 {
-  background-color: #5f4f30;
+  background-color: #26a641;
 }
 
 .contribution-cell-level-4 {
-  background-color: var(--ink);
+  background-color: #39d353;
 }
 
 /* ---------- Embed ---------- */
