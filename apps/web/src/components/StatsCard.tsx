@@ -1,5 +1,4 @@
 import React from 'react';
-import { Badge, Card, Text } from '@zaemoru/react';
 import {
   PolarAngleAxis,
   PolarGrid,
@@ -27,28 +26,41 @@ export const StatsCard: React.FC<StatsCardProps> = ({ stats }) => {
 
   return (
     <section className="stats-card">
-      <div className="stats-summary">
-        <Card className="summary-card" elevation="low" padding="large">
-          <div className="stat-value">{formatNumber(stats.totals.contributions)}</div>
-          <Text className="stat-label" size="sm" tone="muted" weight="semibold">
-            Contributions
-          </Text>
-        </Card>
-        <Card className="summary-card" elevation="low" padding="large">
-          <div className="stat-value">{formatNumber(stats.totals.repositories)}</div>
-          <Text className="stat-label" size="sm" tone="muted" weight="semibold">
-            Repositories
-          </Text>
-        </Card>
+      <div className="lede">
+        <div className="lede-figure">
+          <span className="lede-value">
+            {formatNumber(stats.totals.contributions)}
+          </span>
+          <span className="lede-label">Contributions</span>
+        </div>
+        <div className="lede-figure">
+          <span className="lede-value">
+            {formatNumber(stats.totals.repositories)}
+          </span>
+          <span className="lede-label">Repositories</span>
+        </div>
       </div>
-      <Card className="radial-panel" elevation="low" padding="large">
-        <div className="radial-chart" role="img" aria-label="Commits, PR, Issue, Review radial graph">
+      <figure className="radial-panel">
+        <figcaption className="feature-head">
+          <span className="feature-no">01</span>
+          <span className="feature-title">The Shape of the Work</span>
+        </figcaption>
+        <div
+          className="radial-chart"
+          role="img"
+          aria-label="Commits, PR, Issue, Review radial graph"
+        >
           <ResponsiveContainer width="100%" height="100%">
-            <RadarChart data={radialItems} outerRadius="68%">
-              <PolarGrid gridType="polygon" stroke="var(--border)" />
+            <RadarChart data={radialItems} outerRadius="70%">
+              <PolarGrid gridType="polygon" stroke="var(--rule)" />
               <PolarAngleAxis
                 dataKey="label"
-                tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
+                tick={{
+                  fill: 'var(--ink-soft)',
+                  fontSize: 11,
+                  fontFamily: 'Archivo, sans-serif',
+                  letterSpacing: 1,
+                }}
               />
               <PolarRadiusAxis
                 angle={90}
@@ -60,17 +72,19 @@ export const StatsCard: React.FC<StatsCardProps> = ({ stats }) => {
                 dataKey="value"
                 stroke="var(--accent)"
                 fill="var(--accent)"
-                fillOpacity={0.28}
-                dot={{ r: 4, fill: 'var(--accent)' }}
+                fillOpacity={0.12}
+                dot={{ r: 3, fill: 'var(--ink)' }}
                 isAnimationActive={false}
               />
               <Tooltip
                 formatter={(value) => formatNumber(Number(value))}
                 contentStyle={{
-                  backgroundColor: 'var(--bg-tertiary)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 6,
-                  color: 'var(--text-primary)',
+                  backgroundColor: 'var(--ink)',
+                  border: 'none',
+                  borderRadius: 0,
+                  color: 'var(--paper)',
+                  fontFamily: 'Archivo, sans-serif',
+                  fontSize: 12,
                 }}
               />
             </RadarChart>
@@ -79,14 +93,14 @@ export const StatsCard: React.FC<StatsCardProps> = ({ stats }) => {
         <div className="radial-legend">
           {radialItems.map((item) => (
             <div className="radial-legend-item" key={item.label}>
-              <Badge variant="weak" size="small" color="green">
-                {item.label}
-              </Badge>
-              <strong>{formatNumber(item.value)}</strong>
+              <span className="radial-legend-label">{item.label}</span>
+              <span className="radial-legend-value">
+                {formatNumber(item.value)}
+              </span>
             </div>
           ))}
         </div>
-      </Card>
+      </figure>
     </section>
   );
 };
