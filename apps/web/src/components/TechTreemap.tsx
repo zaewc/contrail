@@ -80,22 +80,30 @@ export const TechTreemap: React.FC<TechTreemapProps> = ({ items }) => {
           }}
         >
           <Tooltip
-            formatter={(_, __, payload) => {
-              const item = payload.payload as TechStackItem;
-              return [`${item.percentage.toFixed(1)}%`, item.name];
+            // Recharts' default tooltip paints the item text with the cell's
+            // fill (dark inks), which disappears on the dark box. Render our own
+            // markup with explicit colors so it's always legible.
+            content={({ active, payload }) => {
+              if (!active || !payload || payload.length === 0) {
+                return null;
+              }
+              const item = payload[0].payload as TechStackItem;
+              return (
+                <div
+                  style={{
+                    backgroundColor: '#16130d',
+                    color: '#f4efe4',
+                    padding: '8px 12px',
+                    fontFamily: 'Archivo, sans-serif',
+                    fontSize: 12,
+                  }}
+                >
+                  <strong style={{ fontWeight: 600 }}>{item.name}</strong>
+                  {' — '}
+                  {item.percentage.toFixed(1)}%
+                </div>
+              );
             }}
-            contentStyle={{
-              backgroundColor: 'var(--ink)',
-              border: 'none',
-              borderRadius: 0,
-              color: 'var(--paper)',
-              fontFamily: 'Archivo, sans-serif',
-              fontSize: 12,
-            }}
-            // Recharts colors the item label with the cell's fill (dark inks),
-            // which vanishes on the dark tooltip — force it to paper.
-            itemStyle={{ color: 'var(--paper)' }}
-            labelStyle={{ color: 'var(--paper)' }}
           />
         </Treemap>
       </ResponsiveContainer>
