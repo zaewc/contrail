@@ -1,5 +1,11 @@
 import { GitHubStats } from './types.js';
 
+// UnifrakturCook (700), subset to the letters in "contrail" and embedded as a
+// data URI so the blackletter wordmark renders even when the card is shown as an
+// <img> (e.g. in a GitHub README), where external font requests are blocked.
+const BLACKLETTER_WOFF2_BASE64 =
+  'd09GMgABAAAAAASAAA4AAAAACEgAAAQsB9sAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGhYbEBwaBmAAZBEICoVshG4BNgIkAyQLFAAEIAWFDAcgG8MGKJ4FdsN1MLRMGEavz0GmRRFBcJmzu996Cn9IOmDXThXw0CNWOoYCHv+fx9PebzrLwQQ0E45mcAIW7KzwRKXkZrwwH6D+BwAdOP+X0xub7sDuamtK+Z7Pv0VzgbQ5WgRxLxwTMKA5rHeeSECYuTVQ0I/RItZYZx0yRHq0IQGMAEgIIglBwIAseQB5pLos921eYzWEiC6qvucBEMPeJKhmSAokMIFWIYAAL8cCQOg9/7+nAHrbAm9QEDvoaXzJAzJc8XVeSHE+iWAm6n56DsPgSVT6io2J4rrF5pljtplmhIhGQCspYPrEW3AZAu8AcQguVmXZnfUeN2W0lTFVYyVZNfWckjwGTxWxVjh5gfHlyMNUOo3oAgagsdp41I3CGgofYfRtimUJ/BLHjVpeARFxUGaMWrm3gyIWMJDagOiqG07yKIMmM/IamESOI3neIIfmgguYG5DZrO2g8vDbYY5DdG0O7M6gOniKJY5554LItzCfRyRXkLqUHdPgEa3NcR2ApT9C+qYuYZ/x+TyVvsjbYJsv/o4MacRnhDEMLgPSZ6K1pt8GfPdeiguBn4o2Did+nr08b1FnXfSZmR50Y7xYmsBOKPSx7/EiQ7/GbM4tWJ/kfQG2lyXFBlzXHtsud3ox4bGznHI9vXlHuGu8iYnLvYSxpQsHzEPcM+I3APppn3XwfukenTgruZliQoeDNac/X1/nFRomftLR+lvCqGUzZHP9QbUoj2m1kR4h3lYFssLMIOntVVHbtFsk0QAWHbMdtA5WNU71f6bXJBuEYU6Hck5/jvKKTxuXlhGvs+7J61Zu86CaC7i2zjM0TOKkY5TDrIMgVkYv5s/tjjWMw9fs0D/hrhYcGbNq/bWQ8RL0QhAB61wjanG3yKNUMtSijFaI1oDm0yq678xo+KTFrHZ8ZkuFv6wybjJSk7PyldsHjwMKRz0O4e8flvri3udIj+m1ER6VOagCW0QlDB277GahXmk8jpVuubEdrY1ZDoZcbCmVQBgKbtD9BfhrFJ7KUfD9KikjCYDnAYPjas0/7/+ektoh6Q9ukgQAAX6N+x+h/izoAIj8on739f++zQOzUoJqcKCXtpCqpWBVuVAqG2hkKCS4gX5bFlz985F8mcZ1pfNCLSmAeASXIUd0o1YuIBnjckxyzGgUgnIx5vFsW8SZpyyEkMgcKgaFpgMdmC4wMzE1AVgjoE2AwNDagMWg0ZvA0NHLfiFoCCoTAQcuJOKm/gYhINR/iRjkd0NwdAbVkUTCGYkE4ybm8Q8EfeBw8I9BoBB4zmBpOBpDi+H51jAZtyDUOHbMw6tiDEGkRU8aRPgAVkfbGO/fvQDvZASxNb9w4IHvLwENA8bB1OhU8QLKDyQ8nG5VPnU26/TwqB+wWKIdK54amht+Y+tpJKcLhiawpVRDDw0jtu8lAAAA';
+
 function escapeXml(str: string): string {
   return str
     .replace(/&/g, '&amp;')
@@ -78,11 +84,17 @@ export function renderStatsSvg(stats: GitHubStats): string {
 >
   <defs>
     <style>
+      @font-face {
+        font-family: 'ContrailBlackletter';
+        font-style: normal;
+        font-weight: 700;
+        src: url(data:font/woff2;base64,${BLACKLETTER_WOFF2_BASE64}) format('woff2');
+      }
       .contrail-bg { fill: ${bgColor}; }
       .contrail-text { fill: ${textColor}; font-family: 'Segoe UI', Tahoma, sans-serif; }
       .contrail-label { font-size: 11px; fill: #8b949e; }
       .contrail-border { stroke: #30363d; stroke-width: 1; fill: none; }
-      .contrail-title { font-size: 18px; font-weight: bold; font-family: 'Segoe UI', Tahoma, sans-serif; }
+      .contrail-title { font-size: 28px; font-weight: 700; font-family: 'ContrailBlackletter', 'Segoe UI', Tahoma, serif; }
       .contrail-stat-value { font-size: 16px; font-weight: bold; font-family: 'Segoe UI', Tahoma, sans-serif; }
       .contrail-stat-label { font-size: 10px; font-family: 'Segoe UI', Tahoma, sans-serif; }
     </style>
@@ -94,9 +106,9 @@ export function renderStatsSvg(stats: GitHubStats): string {
   <!-- Border -->
   <rect class="contrail-border" x="0" y="0" width="${width}" height="${height}"/>
 
-  <!-- Header -->
-  <text class="contrail-text contrail-title" x="20" y="34">contrail</text>
-  <text class="contrail-text contrail-label" x="20" y="54">${escapeXml(stats.login)} • Last 5 years</text>
+  <!-- Header: wordmark on the left, byline on the right, on one baseline -->
+  <text class="contrail-text contrail-title" x="20" y="42">contrail</text>
+  <text class="contrail-text contrail-label" x="${width - 20}" y="42" text-anchor="end">${escapeXml(stats.login)} • Last 5 years</text>
 
   <!-- Stats Grid -->
   <g>
