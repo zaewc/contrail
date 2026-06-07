@@ -172,13 +172,16 @@ fastify.get<{ Params: { login: string } }>(
     }
 
     try {
-      const cachedStats = getCached<GitHubStats>(statsCacheKey(login));
+      // The card reports lifetime line counts, so it must analyze every commit
+      // in the window (commitLimit: null) rather than the incremental sample the
+      // dashboard uses — otherwise additions/deletions only cover ~100 commits.
+      const cachedStats = getCached<GitHubStats>(statsCacheKey(login, null));
       const stats = cachedStats ?? (await getGitHubStats(login, {
-        commitLimit: DEFAULT_INCREMENTAL_COMMIT_LIMIT,
+        commitLimit: null,
         includeTechStack: false,
       }));
       if (!cachedStats) {
-        setCached(statsCacheKey(login), stats, CACHE_TTL);
+        setCached(statsCacheKey(login, null), stats, CACHE_TTL);
       }
       const svg = renderStatsSvg(stats);
 

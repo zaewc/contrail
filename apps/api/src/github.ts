@@ -373,7 +373,13 @@ export async function getGitHubStats(
     profile.repositoryNodes
   );
   const streaks = calculateStreaks(mergedCalendar);
-  const commitLimit = options.commitLimit ?? DEFAULT_COMMIT_LIMIT;
+  // Distinguish an omitted limit (use the default sample) from an explicit
+  // null (analyze every commit). `??` would collapse null into the default and
+  // silently cap lifetime stats — e.g. the README card — at 100 commits.
+  const commitLimit =
+    options.commitLimit === undefined
+      ? DEFAULT_COMMIT_LIMIT
+      : options.commitLimit;
   const includeTechStack = options.includeTechStack !== false;
   const cachedTechStack = includeTechStack
     ? getCached<TechStackItem[]>(techStackCacheKey(profile.login))
