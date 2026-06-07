@@ -16,7 +16,7 @@ type CurvePoint = {
   y: number;
 };
 
-const EMPTY_COLOR = '#e7e0d2';
+const EMPTY_COLOR = '#ebedf0';
 
 const CELL_SIZE = 10;
 const CELL_GAP = 4;
