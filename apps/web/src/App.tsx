@@ -269,9 +269,17 @@ export const App: React.FC = () => {
       {state === 'success' && stats && (
         <div className="results">
           <section className="cover">
-            <div className="cover-monogram" aria-hidden="true">
-              {stats.name ? stats.name[0]?.toUpperCase() : '?'}
-            </div>
+            {stats.avatarUrl ? (
+              <img
+                className="cover-avatar"
+                src={stats.avatarUrl}
+                alt={stats.name || stats.login}
+              />
+            ) : (
+              <div className="cover-monogram" aria-hidden="true">
+                {stats.name ? stats.name[0]?.toUpperCase() : '?'}
+              </div>
+            )}
             <div className="cover-text">
               <p className="cover-kicker">Cover Story</p>
               <h2 className="cover-name">{stats.name || stats.login}</h2>
@@ -405,7 +413,19 @@ export const App: React.FC = () => {
 
       <footer className="colophon">
         <span>Contrail</span>
-        <span>Printed on demand · No data retained</span>
+        <nav className="colophon-links">
+          <a href="https://github.com/zaewc" target="_blank" rel="noreferrer">
+            @zaewc
+          </a>
+          <a
+            href="https://github.com/zaewc/contrail"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Repository
+          </a>
+          <a href="mailto:s24064@gsm.hs.kr">s24064@gsm.hs.kr</a>
+        </nav>
       </footer>
     </div>
   );
