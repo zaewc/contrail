@@ -92,6 +92,10 @@ export const TechTreemap: React.FC<TechTreemapProps> = ({ items }) => {
               fontFamily: 'Archivo, sans-serif',
               fontSize: 12,
             }}
+            // Recharts colors the item label with the cell's fill (dark inks),
+            // which vanishes on the dark tooltip — force it to paper.
+            itemStyle={{ color: 'var(--paper)' }}
+            labelStyle={{ color: 'var(--paper)' }}
           />
         </Treemap>
       </ResponsiveContainer>
