@@ -9,6 +9,7 @@
 
   --serif: 'Fraunces', Georgia, 'Times New Roman', serif;
   --sans: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --blackletter: 'UnifrakturCook', 'Fraunces', Georgia, serif;
 
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --lift: 0 26px 50px -34px rgba(20, 17, 11, 0.55);
@@ -111,13 +112,11 @@ body {
 }
 
 .logo {
-  font-family: var(--serif);
-  font-weight: 600;
-  font-size: clamp(64px, 16vw, 176px);
-  line-height: 0.82;
-  letter-spacing: -0.04em;
-  font-optical-sizing: auto;
-  font-variation-settings: 'opsz' 144, 'SOFT' 0, 'WONK' 0;
+  font-family: var(--blackletter);
+  font-weight: 700;
+  font-size: clamp(58px, 14vw, 156px);
+  line-height: 0.92;
+  letter-spacing: 0.01em;
   text-align: center;
 }
 
@@ -827,11 +826,12 @@ body {
 }
 
 .colophon span:first-child {
-  font-family: var(--serif);
-  font-style: italic;
+  font-family: var(--blackletter);
+  font-weight: 700;
+  font-style: normal;
   text-transform: none;
-  font-size: 16px;
-  letter-spacing: 0;
+  font-size: 22px;
+  letter-spacing: 0.01em;
   color: var(--ink);
 }
 
