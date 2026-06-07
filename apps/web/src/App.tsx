@@ -1,16 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Badge,
-  Button,
-  Card,
-  Heading,
-  Result,
-  Section,
-  Spinner,
-  Text,
-  TextField,
-} from '@zaemoru/react';
-import {
   fetchStats,
   fetchTechStack,
   getEmbedMarkdown,
@@ -218,183 +207,206 @@ export const App: React.FC = () => {
         },
       ]
     : [];
+  const issueYear = stats
+    ? new Date(stats.range.to).getFullYear()
+    : new Date().getFullYear();
 
   return (
-    <div className="container">
-      <div className="header">
-        <Heading className="header-title" level="1" size="3xl">
-          contrail
-        </Heading>
-        <Text tone="muted" size="md">
-          GitHub contribution intelligence
-        </Text>
-      </div>
+    <div className="mag">
+      <header className="masthead">
+        <div className="masthead-meta">
+          <span>Vol. 01</span>
+          <span>The GitHub Issue</span>
+          <span>Nº {issueYear}</span>
+        </div>
+        <h1 className="logo">Contrail</h1>
+        <p className="tagline">
+          A field study of one developer, told in commits, streaks &amp; the
+          languages they keep.
+        </p>
+      </header>
 
-      <div className="search-shell">
-        <Card className="search-card" elevation="low" padding="none">
-          <div
-            className="search-section"
-            onKeyDown={handleSearchKeyDown}
+      <div className="search" onKeyDown={handleSearchKeyDown}>
+        <label className="search-label" htmlFor="handle">
+          The Subject
+        </label>
+        <div className="search-row">
+          <input
+            id="handle"
+            className="search-input"
+            type="text"
+            placeholder="github handle"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            disabled={state === 'loading'}
+            autoComplete="off"
+          />
+          <button
+            className="search-button"
+            type="button"
+            disabled={state === 'loading'}
+            onClick={() => void handleSearch()}
           >
-            <TextField
-              className="search-input"
-              label="GitHub username"
-              placeholder="Enter GitHub username..."
-              value={input}
-              onInput={(value) => setInput(value)}
-              disabled={state === 'loading'}
-            />
-            <Button
-              className="search-button"
-              type="button"
-              size="medium"
-              fullWidth
-              loading={state === 'loading'}
-              disabled={state === 'loading'}
-              onClick={() => void handleSearch()}
-            >
-              Analyze
-            </Button>
-          </div>
-        </Card>
+            {state === 'loading' ? 'Reading…' : 'Read'}
+          </button>
+        </div>
       </div>
 
       {state === 'loading' && (
-        <Card className="state-card" elevation="low" padding="large">
-          <Spinner size="medium" tone="primary" label="Loading your stats" />
-        </Card>
+        <div className="state-card">
+          <span className="dot-loader" aria-hidden="true" />
+          <p className="state-text">Developing the feature…</p>
+        </div>
       )}
 
       {state === 'error' && (
-        <Result
-          className="state-card"
-          tone="danger"
-          title="Error"
-          description={error}
-        />
+        <div className="state-card state-card-error">
+          <p className="state-kicker">Off the record</p>
+          <p className="state-text">{error}</p>
+        </div>
       )}
 
       {state === 'success' && stats && (
         <div className="results">
-          <Card className="profile" elevation="low" padding="large">
-            <div className="profile-avatar">
+          <section className="cover">
+            <div className="cover-monogram" aria-hidden="true">
               {stats.name ? stats.name[0]?.toUpperCase() : '?'}
             </div>
-            <div className="profile-info">
-              <Heading level="2" size="lg">{stats.name || stats.login}</Heading>
-              <Badge variant="weak" size="small" color="blue">
-                @{stats.login}
-              </Badge>
-              <Text className="range" tone="muted" size="sm">
-                {formatDate(stats.range.from)} • {formatDate(stats.range.to)}
-              </Text>
+            <div className="cover-text">
+              <p className="cover-kicker">Cover Story</p>
+              <h2 className="cover-name">{stats.name || stats.login}</h2>
+              <p className="cover-handle">@{stats.login}</p>
+              <p className="cover-dateline">
+                {formatDate(stats.range.from)} — {formatDate(stats.range.to)}
+              </p>
             </div>
-          </Card>
+          </section>
 
           <StatsCard stats={stats} />
 
-          <div className="analysis-grid">
-            <Card className="analysis-card" elevation="low" padding="large">
-              <Heading level="3" size="sm">Streak</Heading>
-              <div className="metric-row">
-                <Text tone="muted" size="sm">Current streak</Text>
-                <strong>{formatNumber(stats.streaks.current)} days</strong>
+          <div className="feature-grid">
+            <figure className="feature">
+              <figcaption className="feature-head">
+                <span className="feature-no">02</span>
+                <span className="feature-title">The Streak</span>
+              </figcaption>
+              <div className="figure-row">
+                <span className="figure-label">Current streak</span>
+                <span className="figure-value">
+                  {formatNumber(stats.streaks.current)} days
+                </span>
               </div>
-              <div className="metric-row">
-                <Text tone="muted" size="sm">Max streak</Text>
-                <strong>{formatNumber(stats.streaks.max)} days</strong>
+              <div className="figure-row">
+                <span className="figure-label">Max streak</span>
+                <span className="figure-value">
+                  {formatNumber(stats.streaks.max)} days
+                </span>
               </div>
-              <Text className="metric-note" tone="muted" size="sm">
+              <p className="feature-note">
                 {stats.streaks.maxStartDate && stats.streaks.maxEndDate
                   ? `${stats.streaks.maxStartDate} → ${stats.streaks.maxEndDate}`
                   : 'No active streak in this range'}
-              </Text>
-            </Card>
+              </p>
+            </figure>
 
-            <Card className="analysis-card" elevation="low" padding="large">
-              <Heading level="3" size="sm">작성 커밋 기준 코드 변경량</Heading>
-              <Text className="scope-note" tone="muted" size="sm">
+            <figure className="feature">
+              <figcaption className="feature-head">
+                <span className="feature-no">03</span>
+                <span className="feature-title">작성 커밋 기준 코드 변경량</span>
+              </figcaption>
+              <p className="feature-note feature-scope">
                 최근 {stats.codeVolume.scope.years}년,{' '}
                 {stats.codeVolume.scope.commitLimit === null
                   ? '커밋 제한 없음'
                   : `최대 ${formatNumber(stats.codeVolume.scope.commitLimit)}커밋`}
                 {isCodeVolumeLoading && <span className="inline-spinner" />}
-              </Text>
+              </p>
               <div className={codeMetricClassName}>
                 {codeMetrics.map(({ label, value }) => (
-                  <div key={label}>
-                    <Text tone="muted" size="sm">{label}</Text>
-                    <strong>
+                  <div className="metric-cell" key={label}>
+                    <span className="metric-label">{label}</span>
+                    <span className="metric-value">
                       {formatNumber(value)}
-                      {isCodeVolumeLoading && <span className="loading-dots">...</span>}
-                    </strong>
+                      {isCodeVolumeLoading && (
+                        <span className="loading-dots">…</span>
+                      )}
+                    </span>
                   </div>
                 ))}
               </div>
               {stats.codeVolume.scope.isPartial && (
-                <Text className="partial-note" tone="muted" size="sm">
+                <p className="feature-note partial-note">
                   Some repositories may be partial due to GitHub API limits.
-                </Text>
+                </p>
               )}
-            </Card>
+            </figure>
           </div>
 
-          <Section className="section-block" title="기술스택" gap="medium">
-            <Card className="analysis-card full-width" elevation="low" padding="large">
+          <section className="section-block">
+            <h3 className="section-head">
+              <span className="feature-no">04</span> 기술스택{' '}
+              <span className="section-en">— The Wardrobe</span>
+            </h3>
+            <div className="panel">
               {techStack === null ? (
                 <div className="techstack-loading">
-                  <Spinner />
-                  <Text tone="muted" size="sm">기술스택 분석 중...</Text>
+                  <span className="dot-loader" aria-hidden="true" />
+                  <p className="state-text">기술스택 분석 중…</p>
                 </div>
               ) : (
                 <TechTreemap items={techStack} />
               )}
-            </Card>
-          </Section>
+            </div>
+          </section>
 
-          <Section className="section-block" title="잔디" gap="medium">
-            <Card className="contribution-section" elevation="low" padding="large">
+          <section className="section-block">
+            <h3 className="section-head">
+              <span className="feature-no">05</span> 잔디{' '}
+              <span className="section-en">— The Year in Green</span>
+            </h3>
+            <div className="panel">
               <ContributionGrid days={stats.calendar} />
-            </Card>
-          </Section>
+            </div>
+          </section>
 
-          <Card className="embed-section" elevation="low" padding="large">
-            <Heading level="3" size="sm">리드미에 넣기</Heading>
-            <Text className="embed-note" tone="muted" size="sm">
+          <section className="section-block embed-section">
+            <h3 className="section-head">
+              <span className="feature-no">06</span> 리드미에 넣기{' '}
+              <span className="section-en">— The Clipping</span>
+            </h3>
+            <p className="feature-note">
               아래 마크다운을 GitHub README에 붙여넣으세요.
-            </Text>
+            </p>
             <div className="embed-code">
               <code>{getEmbedMarkdown(stats.login)}</code>
-              <Button
+              <button
                 className="copy-button"
-                variant="secondary"
-                size="small"
+                type="button"
                 onClick={() => void copyToClipboard()}
               >
                 {copied ? 'Copied' : 'Copy'}
-              </Button>
+              </button>
             </div>
-          </Card>
+          </section>
         </div>
       )}
 
       {state === 'empty' && (
-        <div className="empty-shell">
-          <Card className="empty-state" elevation="low" padding="none">
-            <div className="empty-state-content">
-              <Badge variant="weak" size="small" color="green">
-                Ready
-              </Badge>
-              <Heading level="2" size="md">
-                Enter a GitHub username to get started
-              </Heading>
-              <Text tone="muted" size="sm">
-                No data is stored on our servers. All analysis happens instantly.
-              </Text>
-            </div>
-          </Card>
+        <div className="empty-state">
+          <p className="empty-kicker">Now Casting</p>
+          <p className="empty-headline">
+            Type a GitHub handle above to develop the feature.
+          </p>
+          <p className="empty-note">
+            Nothing is stored on our servers. Every issue is printed on demand.
+          </p>
         </div>
       )}
+
+      <footer className="colophon">
+        <span>Contrail</span>
+        <span>Printed on demand · No data retained</span>
+      </footer>
     </div>
   );
 };

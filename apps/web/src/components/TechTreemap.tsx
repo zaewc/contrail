@@ -10,15 +10,17 @@ interface TechTreemapProps {
   items: TechStackItem[];
 }
 
+// An editorial, tonal palette — warm ink, sepia and a single accent — instead
+// of the old neon syntax-highlighting colors.
 const colors = [
-  '#39d353',
-  '#79c0ff',
-  '#d2a8ff',
-  '#ffa657',
-  '#ff7b72',
-  '#56d4dd',
-  '#a5d6ff',
-  '#f2cc60',
+  '#1a1714',
+  '#c8452d',
+  '#3a352c',
+  '#9a8f78',
+  '#5c554a',
+  '#b9b1a0',
+  '#2a2620',
+  '#d8d0bf',
 ];
 
 export const TechTreemap: React.FC<TechTreemapProps> = ({ items }) => {
@@ -52,8 +54,8 @@ export const TechTreemap: React.FC<TechTreemapProps> = ({ items }) => {
                   width={width}
                   height={height}
                   fill={fill}
-                  stroke="var(--bg-secondary)"
-                  strokeWidth={4}
+                  stroke="var(--paper)"
+                  strokeWidth={2}
                 />
                 {showLabel && (
                   <>
@@ -83,9 +85,12 @@ export const TechTreemap: React.FC<TechTreemapProps> = ({ items }) => {
               return [`${item.percentage.toFixed(1)}%`, item.name];
             }}
             contentStyle={{
-              backgroundColor: 'var(--bg-tertiary)',
-              border: '1px solid var(--border)',
-              color: 'var(--text-primary)',
+              backgroundColor: 'var(--ink)',
+              border: 'none',
+              borderRadius: 0,
+              color: 'var(--paper)',
+              fontFamily: 'Archivo, sans-serif',
+              fontSize: 12,
             }}
           />
         </Treemap>
