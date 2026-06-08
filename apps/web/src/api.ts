@@ -166,12 +166,19 @@ function getPublicOrigin(): string {
   return '';
 }
 
-export function getCardUrl(login: string): string {
-  return `${getPublicOrigin()}${API_BASE}/users/${login}/card.svg`;
+export type CardTheme = 'dark' | 'light';
+
+export function getCardUrl(login: string, theme: CardTheme = 'dark'): string {
+  // Dark is the server default, so omit the param to keep the URL clean.
+  const query = theme === 'light' ? '?theme=light' : '';
+  return `${getPublicOrigin()}${API_BASE}/users/${login}/card.svg${query}`;
 }
 
-export function getEmbedMarkdown(login: string): string {
-  return `[![contrail](${getCardUrl(login)})](${getPublicOrigin()}/?user=${encodeURIComponent(
+export function getEmbedMarkdown(
+  login: string,
+  theme: CardTheme = 'dark'
+): string {
+  return `[![contrail](${getCardUrl(login, theme)})](${getPublicOrigin()}/?user=${encodeURIComponent(
     login
   )})`;
 }

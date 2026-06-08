@@ -742,6 +742,39 @@ body {
 }
 
 /* ---------- Embed ---------- */
+.theme-toggle {
+  display: inline-flex;
+  border: 1px solid var(--ink);
+  margin-bottom: 14px;
+}
+
+.theme-option {
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  padding: 8px 18px;
+  cursor: pointer;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease);
+}
+
+.theme-option + .theme-option {
+  border-left: 1px solid var(--ink);
+}
+
+.theme-option.is-active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.theme-option:not(.is-active):hover {
+  color: var(--ink);
+}
+
 .embed-code {
   background: var(--ink);
   color: var(--paper);

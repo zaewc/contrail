@@ -5,6 +5,7 @@ import {
   getEmbedMarkdown,
   GitHubStats,
   TechStackItem,
+  type CardTheme,
 } from './api.js';
 import { StatsCard } from './components/StatsCard.js';
 import { ContributionGrid } from './components/ContributionGrid.js';
@@ -34,6 +35,7 @@ export const App: React.FC = () => {
   const [techStack, setTechStack] = useState<TechStackItem[] | null>(null);
   const [error, setError] = useState<string>('');
   const [copied, setCopied] = useState(false);
+  const [cardTheme, setCardTheme] = useState<CardTheme>('dark');
   const activeRequestRef = useRef(0);
   const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -174,7 +176,7 @@ export const App: React.FC = () => {
 
   const copyToClipboard = async () => {
     if (!stats) return;
-    const embedCode = getEmbedMarkdown(stats.login);
+    const embedCode = getEmbedMarkdown(stats.login, cardTheme);
     const succeeded = await writeToClipboard(embedCode);
     if (!succeeded) {
       return;
@@ -385,8 +387,23 @@ export const App: React.FC = () => {
             <p className="feature-note">
               아래 마크다운을 GitHub README에 붙여넣으세요.
             </p>
+            <div className="theme-toggle" role="group" aria-label="Card theme">
+              {(['dark', 'light'] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  className={`theme-option${
+                    cardTheme === option ? ' is-active' : ''
+                  }`}
+                  aria-pressed={cardTheme === option}
+                  onClick={() => setCardTheme(option)}
+                >
+                  {option === 'dark' ? 'Dark' : 'Light'}
+                </button>
+              ))}
+            </div>
             <div className="embed-code">
-              <code>{getEmbedMarkdown(stats.login)}</code>
+              <code>{getEmbedMarkdown(stats.login, cardTheme)}</code>
               <button
                 className="copy-button"
                 type="button"
