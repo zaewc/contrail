@@ -15,11 +15,49 @@ function escapeXml(str: string): string {
     .replace(/'/g, '&apos;');
 }
 
-export function renderStatsSvg(stats: GitHubStats): string {
-  const bgColor = '#0d1117';
-  const textColor = '#c9d1d9';
-  const addColor = '#3fb950';
-  const deleteColor = '#f85149';
+export type CardTheme = 'dark' | 'light';
+
+interface CardPalette {
+  bg: string;
+  text: string;
+  add: string;
+  delete: string;
+  border: string;
+  label: string;
+}
+
+const CARD_THEMES: Record<CardTheme, CardPalette> = {
+  dark: {
+    bg: '#0d1117',
+    text: '#c9d1d9',
+    add: '#3fb950',
+    delete: '#f85149',
+    border: '#30363d',
+    label: '#8b949e',
+  },
+  light: {
+    bg: '#ffffff',
+    text: '#1f2328',
+    add: '#1a7f37',
+    delete: '#cf222e',
+    border: '#d0d7de',
+    label: '#59636e',
+  },
+};
+
+export function resolveCardTheme(value: unknown): CardTheme {
+  return value === 'light' ? 'light' : 'dark';
+}
+
+export function renderStatsSvg(
+  stats: GitHubStats,
+  theme: CardTheme = 'dark'
+): string {
+  const palette = CARD_THEMES[theme];
+  const bgColor = palette.bg;
+  const textColor = palette.text;
+  const addColor = palette.add;
+  const deleteColor = palette.delete;
   const width = 450;
   const height = 220;
 
@@ -44,7 +82,7 @@ export function renderStatsSvg(stats: GitHubStats): string {
   ) => `
     <rect x="${x}" y="${y}" width="${cellWidth}" height="${cellHeight}" class="contrail-border" rx="4"/>
     <text class="contrail-stat-value" x="${x + 10}" y="${y + 33}" fill="${valueColor}">${value}</text>
-    <text class="contrail-stat-label" x="${x + 10}" y="${y + 50}" fill="#8b949e">${label}</text>
+    <text class="contrail-stat-label" x="${x + 10}" y="${y + 50}" fill="${palette.label}">${label}</text>
   `;
 
   const row1Y = 72;
@@ -92,8 +130,8 @@ export function renderStatsSvg(stats: GitHubStats): string {
       }
       .contrail-bg { fill: ${bgColor}; }
       .contrail-text { fill: ${textColor}; font-family: 'Segoe UI', Tahoma, sans-serif; }
-      .contrail-label { font-size: 11px; fill: #8b949e; }
-      .contrail-border { stroke: #30363d; stroke-width: 1; fill: none; }
+      .contrail-label { font-size: 11px; fill: ${palette.label}; }
+      .contrail-border { stroke: ${palette.border}; stroke-width: 1; fill: none; }
       .contrail-title { font-size: 28px; font-weight: 700; font-family: 'ContrailBlackletter', 'Segoe UI', Tahoma, serif; }
       .contrail-stat-value { font-size: 16px; font-weight: bold; font-family: 'Segoe UI', Tahoma, sans-serif; }
       .contrail-stat-label { font-size: 10px; font-family: 'Segoe UI', Tahoma, sans-serif; }

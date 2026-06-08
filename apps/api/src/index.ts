@@ -3,7 +3,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { getGitHubStats, getTechStack } from './github.js';
 import { getCached, setCached } from './cache.js';
-import { renderStatsSvg } from './svg.js';
+import { renderStatsSvg, resolveCardTheme, type CardTheme } from './svg.js';
 import type { GitHubStats, TechStackItem } from './types.js';
 
 const PORT = parseInt(process.env.PORT || '4000', 10);
@@ -12,7 +12,8 @@ const DEFAULT_INCREMENTAL_COMMIT_LIMIT = 100;
 const MAX_INCREMENTAL_COMMIT_LIMIT = 10000;
 const statsCacheKey = (login: string, commitLimit: number | null = DEFAULT_INCREMENTAL_COMMIT_LIMIT) =>
   `github:stats:${login.toLowerCase()}:v8:commitLimit:${commitLimit ?? 'all'}`;
-const svgCacheKey = (login: string) => `svg:${login.toLowerCase()}:v2`;
+const svgCacheKey = (login: string, theme: CardTheme = 'dark') =>
+  `svg:${login.toLowerCase()}:${theme}:v3`;
 const pendingStatsRequests = new Map<string, Promise<GitHubStats>>();
 
 const fastify = Fastify({
@@ -157,13 +158,14 @@ fastify.get<{ Params: { login: string } }>(
 );
 
 // SVG card endpoint
-fastify.get<{ Params: { login: string } }>(
+fastify.get<{ Params: { login: string }; Querystring: { theme?: string } }>(
   '/api/users/:login/card.svg',
   async (request, reply) => {
     const { login } = request.params;
+    const theme = resolveCardTheme(request.query.theme);
 
     // Check cache
-    const cached = getCached(svgCacheKey(login));
+    const cached = getCached(svgCacheKey(login, theme));
     if (cached) {
       reply
         .type('image/svg+xml')
@@ -183,10 +185,10 @@ fastify.get<{ Params: { login: string } }>(
       if (!cachedStats) {
         setCached(statsCacheKey(login, null), stats, CACHE_TTL);
       }
-      const svg = renderStatsSvg(stats);
+      const svg = renderStatsSvg(stats, theme);
 
       // Cache the result
-      setCached(svgCacheKey(login), svg, CACHE_TTL);
+      setCached(svgCacheKey(login, theme), svg, CACHE_TTL);
 
       reply
         .type('image/svg+xml')
