@@ -171,29 +171,32 @@ export const ContributionGrid: React.FC<ContributionGridProps> = ({ days }) => {
 
   return (
     <div className="contribution-container contribution-curve-container">
-      <div
+      <svg
         className="contribution-curve"
-        style={{
-          width: spiralSize.width,
-          height: spiralSize.height,
-        }}
+        width={spiralSize.width}
+        height={spiralSize.height}
+        viewBox={`0 0 ${spiralSize.width} ${spiralSize.height}`}
+        role="img"
+        aria-label="Contribution activity shown as a spiral"
       >
         {continuousDays.map((day, index) => {
           const point = getContributionPoint(index);
 
           return (
-            <div
+            <rect
               key={day.date}
               className={`contribution-cell contribution-curve-cell contribution-cell-level-${getContributionLevel(day.count)}`}
-              style={{
-                left: centerX + point.x - CELL_SIZE / 2,
-                top: centerY + point.y - CELL_SIZE / 2,
-              }}
-              title={`${day.date}: ${day.count} contributions`}
-            />
+              x={centerX + point.x - CELL_SIZE / 2}
+              y={centerY + point.y - CELL_SIZE / 2}
+              width={CELL_SIZE}
+              height={CELL_SIZE}
+              rx={2}
+            >
+              <title>{`${day.date}: ${day.count} contributions`}</title>
+            </rect>
           );
         })}
-      </div>
+      </svg>
     </div>
   );
 };
