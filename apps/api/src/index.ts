@@ -13,7 +13,7 @@ const MAX_INCREMENTAL_COMMIT_LIMIT = 10000;
 const statsCacheKey = (login: string, commitLimit: number | null = DEFAULT_INCREMENTAL_COMMIT_LIMIT) =>
   `github:stats:${login.toLowerCase()}:v9:commitLimit:${commitLimit ?? 'all'}`;
 const svgCacheKey = (login: string, theme: CardTheme = 'dark') =>
-  `svg:${login.toLowerCase()}:${theme}:v4`;
+  `svg:${login.toLowerCase()}:${theme}:v3`;
 const pendingStatsRequests = new Map<string, Promise<GitHubStats>>();
 
 const fastify = Fastify({
