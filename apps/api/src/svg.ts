@@ -93,7 +93,7 @@ export function renderStatsSvg(
     renderCell(columns[1], row1Y, formatNumber(stats.totals.commits), 'Commits'),
     renderCell(columns[2], row1Y, formatNumber(stats.totals.pullRequests), 'PRs'),
     renderCell(columns[3], row1Y, formatNumber(stats.totals.issues), 'Issues'),
-    renderCell(columns[0], row2Y, formatNumber(stats.streaks.current), 'Current streak'),
+    renderCell(columns[0], row2Y, formatNumber(stats.totals.stars), 'Stars'),
     renderCell(columns[1], row2Y, formatNumber(stats.streaks.max), 'Max streak'),
     renderCell(
       columns[2],

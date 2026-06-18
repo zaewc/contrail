@@ -39,6 +39,10 @@ export const StatsCard: React.FC<StatsCardProps> = ({ stats }) => {
           </span>
           <span className="lede-label">Repositories</span>
         </div>
+        <div className="lede-figure">
+          <span className="lede-value">{formatNumber(stats.totals.stars)}</span>
+          <span className="lede-label">Stars Received</span>
+        </div>
       </div>
       <figure className="radial-panel">
         <figcaption className="feature-head">

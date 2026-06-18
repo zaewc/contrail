@@ -372,6 +372,9 @@ export async function getGitHubStats(
     profile.login,
     profile.repositoryNodes
   );
+  const totalStars = repositories
+    .filter((repository) => repository.isPersonal)
+    .reduce((sum, repository) => sum + repository.stargazerCount, 0);
   const streaks = calculateStreaks(mergedCalendar);
   // Distinguish an omitted limit (use the default sample) from an explicit
   // null (analyze every commit). `??` would collapse null into the default and
@@ -432,6 +435,7 @@ export async function getGitHubStats(
       issues: totalIssues,
       pullRequestReviews: totalPullRequestReviews,
       repositories: Math.max(repositoryCount, repositories.length),
+      stars: totalStars,
       restrictedContributions: totalRestricted,
     },
     calendar: mergedCalendar,

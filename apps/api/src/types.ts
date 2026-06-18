@@ -17,6 +17,7 @@ export interface Totals {
   issues: number;
   pullRequestReviews: number;
   repositories: number;
+  stars: number;
   restrictedContributions: number;
 }
 
